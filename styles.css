@@ -27,7 +27,13 @@
     margin: 0;
 }
 
+.que.labcalc .labcalc-row {
+    flex-wrap: nowrap;
+}
+
 .que.labcalc .labcalc-control {
+    flex: 1 1 auto;
+    min-width: 0;
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
@@ -60,4 +66,10 @@
 .que.labcalc .labcalc-groupcheck ul,
 .que .rightanswer ul.labcalc-expected {
     margin-bottom: 0.5rem;
+}
+
+@media (max-width: 575.98px) {
+    .que.labcalc .labcalc-row {
+        flex-wrap: wrap;
+    }
 }

@@ -220,15 +220,17 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
             $parts = [];
             $item = $analysis->results[$i] ?? null;
             if ($question->showexpected && $item) {
+                // When significant figures are graded, show the expected value to that precision.
+                $digits = $item->requiredsigfigs ?? $res->displaysigfigs;
                 $a = (object) [
                     'label' => format_string($question->label_for($res)),
-                    'value' => evaluator::format_sigfigs($item->expected, $res->displaysigfigs),
+                    'value' => evaluator::format_sigfigs($item->expected, $digits),
                     'unit' => format_string($res->unit),
                     'tolerance' => $question->describe_tolerance($res),
                 ];
                 $parts[] = get_string('expectedfromyourdata', 'qtype_labcalc', $a);
-                if ($item->sigfigs) {
-                    $parts[] = get_string('sigfigsexpected', 'qtype_labcalc', $item->sigfigs->required);
+                if ($item->requiredsigfigs !== null) {
+                    $parts[] = get_string('sigfigsexpected', 'qtype_labcalc', $item->requiredsigfigs);
                 }
             }
             if ($question->showformula) {

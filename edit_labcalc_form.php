@@ -126,17 +126,16 @@ class qtype_labcalc_edit_form extends question_edit_form {
         $repeated[] = $mform->createElement('text', 'resunit', get_string('resunit', 'qtype_labcalc'), ['size' => 10]);
         $repeated[] = $mform->createElement('text', 'resformula', get_string('formula', 'qtype_labcalc'), ['size' => 60]);
         $repeated[] = $mform->createElement('group', 'restolgroup', get_string('tolerance', 'qtype_labcalc'), [
-            $mform->createElement('text', 'restolerance', get_string('tolerance', 'qtype_labcalc'), ['size' => 8]),
+            $mform->createElement('text', 'restolerance', get_string('tolerancevalue', 'qtype_labcalc'), ['size' => 8]),
             $mform->createElement('select', 'restolerancetype', get_string('tolerancetype', 'qtype_labcalc'), [
                 evaluator::TOLERANCE_RELATIVE => get_string('tolerancerelative', 'qtype_labcalc'),
                 evaluator::TOLERANCE_ABSOLUTE => get_string('toleranceabsolute', 'qtype_labcalc'),
             ]),
         ], ' ', false);
         $repeated[] = $mform->createElement('group', 'respartialgroup', get_string('partialtolerance', 'qtype_labcalc'), [
-            $mform->createElement('text', 'respartialtolerance', get_string('partialtolerance', 'qtype_labcalc'),
+            $mform->createElement('text', 'respartialtolerance', get_string('partialwithin', 'qtype_labcalc'),
                     ['size' => 8, 'placeholder' => get_string('none')]),
-            $mform->createElement('static', 'respartialfor', '', get_string('partialfractionfor', 'qtype_labcalc')),
-            $mform->createElement('select', 'respartialfraction', get_string('partialfraction', 'qtype_labcalc'), $fractions),
+            $mform->createElement('select', 'respartialfraction', get_string('partialearns', 'qtype_labcalc'), $fractions),
         ], ' ', false);
         $repeated[] = $mform->createElement('group', 'ressfgroup', get_string('sigfigsgrading', 'qtype_labcalc'), [
             $mform->createElement('select', 'ressigfigsmode', get_string('sigfigsmode', 'qtype_labcalc'), [

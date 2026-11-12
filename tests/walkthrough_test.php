@@ -71,7 +71,9 @@ final class walkthrough_test extends \qbehaviour_walkthrough_test_base {
         $this->assertStringContainsString('do not match the values recorded for Group A', $this->currentoutput);
         $this->assertStringContainsString('reduced by 50%', $this->currentoutput);
         $this->assertStringContainsString('labcalc-mismatch', $this->currentoutput);
-        $this->assertStringContainsString('2.710', $this->currentoutput); // Expected density to 4 s.f.
+        // Expected values are shown to the required significant figures.
+        $this->assertStringContainsString('<strong>2.71</strong>', $this->currentoutput);
+        $this->assertStringContainsString('<strong>0.37</strong>', $this->currentoutput);
     }
 
     public function test_deferred_feedback_sigfigs(): void {

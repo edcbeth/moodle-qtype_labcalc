@@ -186,8 +186,8 @@ final class questiontype_test extends \advanced_testcase {
 
         $this->assertEmpty($this->validate([]));
 
-        $errors = $this->validate(['resformula' => ['{mass} / {density}', '1']]);
-        $this->assertStringContainsString('{density}', $errors['resformula[0]']);
+        $errors = $this->validate(['resformula' => ['{mass} / {volum}', '1']]);
+        $this->assertStringContainsString('{volum}', $errors['resformula[0]']);
 
         // A result can only use earlier results.
         $errors = $this->validate(['resformula' => ['{error} * 2', '{mass}']]);

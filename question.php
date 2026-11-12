@@ -226,7 +226,8 @@ class qtype_labcalc_question extends question_graded_automatically {
      *      raw      name => normalised string of every value the student typed
      *      results  list of stdClass, one per calculated value (when graded):
      *               name, given, expected, valuestatus ('correct'|'partial'|'incorrect'),
-     *               sigfigs (null or stdClass: required, given [min, max], ok), score
+     *               requiredsigfigs (int|null), sigfigs (null if not checked, or stdClass: required,
+     *               given [min, max], ok), score
      *      datacheck null, or stdClass: group (label or null), mismatches (list), penalised (bool)
      *      fraction overall fraction
      */
@@ -298,7 +299,7 @@ class qtype_labcalc_question extends question_graded_automatically {
                 return $analysis;
             }
             $item = (object) ['name' => $res->name, 'given' => $given[$res->name], 'expected' => $expected,
-                    'valuestatus' => 'incorrect', 'sigfigs' => null, 'score' => 0.0];
+                    'valuestatus' => 'incorrect', 'sigfigs' => null, 'requiredsigfigs' => null, 'score' => 0.0];
             if (evaluator::within_tolerance($item->given, $expected, $res->tolerance, $res->tolerancetype)) {
                 $item->valuestatus = 'correct';
                 $item->score = 1.0;
@@ -309,6 +310,7 @@ class qtype_labcalc_question extends question_graded_automatically {
             }
 
             $required[$res->name] = $this->required_sigfigs($res, $analysis->raw, $required);
+            $item->requiredsigfigs = $required[$res->name];
             if ($res->sigfigsmode != sigfigs::MODE_OFF && $required[$res->name] !== null && $item->score > 0) {
                 $range = sigfigs::count($analysis->raw[$res->name]);
                 if ($range !== null) {
