@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qtype_labcalc';
-$plugin->version   = 2026111100;
+$plugin->version   = 2026111200;
 $plugin->requires  = 2022112800; // Moodle 4.1 or later.
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '1.0.1';
+$plugin->release   = '2.0.0';

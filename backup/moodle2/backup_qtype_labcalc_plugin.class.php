@@ -44,22 +44,29 @@ class backup_qtype_labcalc_plugin extends backup_qtype_plugin {
         $plugin->add_child($pluginwrapper);
 
         $options = new backup_nested_element('labcalc', ['id'], [
-            'formula', 'resultlabel', 'resultunit', 'tolerance', 'tolerancetype', 'partialtolerance',
-            'partialfraction', 'displaysigfigs', 'showexpected', 'showformula',
+            'carryforward', 'showexpected', 'showformula', 'groupcheckmode', 'grouppenalty', 'groupdata',
             'correctfeedback', 'correctfeedbackformat', 'partiallycorrectfeedback',
             'partiallycorrectfeedbackformat', 'incorrectfeedback', 'incorrectfeedbackformat',
         ]);
         $vars = new backup_nested_element('labcalc_vars');
         $var = new backup_nested_element('labcalc_var', ['id'], [
-            'name', 'label', 'unit', 'rangemin', 'rangemax', 'samplevalue', 'sortorder',
+            'name', 'label', 'unit', 'rangemin', 'rangemax', 'samplevalue', 'checktolerance', 'sortorder',
+        ]);
+        $results = new backup_nested_element('labcalc_results');
+        $result = new backup_nested_element('labcalc_result', ['id'], [
+            'name', 'label', 'unit', 'formula', 'tolerance', 'tolerancetype', 'partialtolerance', 'partialfraction',
+            'sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight', 'displaysigfigs', 'sortorder',
         ]);
 
         $pluginwrapper->add_child($options);
         $pluginwrapper->add_child($vars);
         $vars->add_child($var);
+        $pluginwrapper->add_child($results);
+        $results->add_child($result);
 
         $options->set_source_table('qtype_labcalc_options', ['questionid' => backup::VAR_PARENTID]);
         $var->set_source_table('qtype_labcalc_vars', ['questionid' => backup::VAR_PARENTID], 'sortorder ASC');
+        $result->set_source_table('qtype_labcalc_results', ['questionid' => backup::VAR_PARENTID], 'sortorder ASC');
 
         return $plugin;
     }

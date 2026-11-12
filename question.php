@@ -25,51 +25,57 @@
 
 use qtype_labcalc\evaluator;
 use qtype_labcalc\evaluation_exception;
+use qtype_labcalc\groupdata;
+use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
 
 /**
  * Represents a Lab calculation question.
  *
- * The student enters one value for each experimental variable plus their calculated result.
- * The expected result is computed by applying the instructor's formula to the student's
- * experimental values, and the student's result is compared to it within a tolerance.
+ * The student enters one value for each experimental variable plus one or more calculated values.
+ * Each expected value is computed by applying the instructor's formula to the student's own
+ * experimental values, and the student's value is compared to it within a tolerance. Optionally the
+ * number of significant figures is checked, and the measurements are compared with the values the
+ * instructor recorded for the student's group.
  *
  * @copyright  2026
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_labcalc_question extends question_graded_automatically {
 
-    /** @var string Response field for the student's calculated value. */
-    const ANSWER_FIELD = 'answer';
-
     /** @var string Prefix of the response fields holding experimental values. */
     const VAR_PREFIX = 'exp_';
 
-    /** @var string formula using {name} placeholders. */
-    public $formula;
-    /** @var string label for the calculated value. */
-    public $resultlabel = '';
-    /** @var string unit for the calculated value. */
-    public $resultunit = '';
-    /** @var float tolerance for full marks. */
-    public $tolerance = 1.0;
-    /** @var int evaluator::TOLERANCE_RELATIVE or evaluator::TOLERANCE_ABSOLUTE. */
-    public $tolerancetype = evaluator::TOLERANCE_RELATIVE;
-    /** @var float|null wider tolerance for partial credit, or null for none. */
-    public $partialtolerance = null;
-    /** @var float fraction for partial credit. */
-    public $partialfraction = 0.5;
-    /** @var int significant figures when displaying the expected value. */
-    public $displaysigfigs = 4;
-    /** @var bool show the expected value (from the student's data) in feedback. */
-    public $showexpected = true;
-    /** @var bool show the formula in feedback. */
-    public $showformula = false;
-    /** @var stdClass[] experimental variables: name, label, unit, rangemin, rangemax, samplevalue. */
+    /** @var string Prefix of the response fields holding calculated values. */
+    const RESULT_PREFIX = 'res_';
+
+    /** @var string Attempt step variable remembering which group's data applies. */
+    const GROUP_VAR = '_labcalcgroup';
+
+    /** @var stdClass[] experimental variables: name, label, unit, rangemin, rangemax, samplevalue, checktolerance. */
     public $vars = [];
 
-    /** @var string[] feedback fields, here for clarity. */
+    /** @var stdClass[] calculated values: name, label, unit, formula, tolerance, tolerancetype, partialtolerance,
+     *      partialfraction, sigfigsmode, sigfigs, sigfigsslack, sigfigspenalty, weight, displaysigfigs. */
+    public $results = [];
+
+    /** @var bool when a formula uses an earlier result, use the student's value for it. */
+    public $carryforward = true;
+    /** @var bool show the expected values (from the student's data) in feedback. */
+    public $showexpected = true;
+    /** @var bool show the formulas in feedback. */
+    public $showformula = false;
+    /** @var int groupdata::MODE_* */
+    public $groupcheckmode = groupdata::MODE_OFF;
+    /** @var float fraction of the mark removed when measurements do not match the group data. */
+    public $grouppenalty = 0.5;
+    /** @var string the group data table. */
+    public $groupdata = '';
+    /** @var string|null key of the group data row that applies to this attempt. */
+    public $groupkey = null;
+
+    /** @var string */
     public $correctfeedback;
     /** @var int */
     public $correctfeedbackformat;
@@ -82,23 +88,107 @@ class qtype_labcalc_question extends question_graded_automatically {
     /** @var int */
     public $incorrectfeedbackformat;
 
+    /** @var array|null cache of the parsed group data. */
+    protected $grouprows = null;
+
     /**
-     * Name of the response field for one experimental variable.
+     * Response field name for an experimental variable.
      *
      * @param stdClass $var
      * @return string
      */
-    public function field_for(stdClass $var): string {
+    public function field_for_var(stdClass $var): string {
         return self::VAR_PREFIX . $var->name;
+    }
+
+    /**
+     * Response field name for a calculated value.
+     *
+     * @param stdClass $result
+     * @return string
+     */
+    public function field_for_result(stdClass $result): string {
+        return self::RESULT_PREFIX . $result->name;
     }
 
     public function get_expected_data() {
         $expected = [];
         foreach ($this->vars as $var) {
-            $expected[$this->field_for($var)] = PARAM_RAW_TRIMMED;
+            $expected[$this->field_for_var($var)] = PARAM_RAW_TRIMMED;
         }
-        $expected[self::ANSWER_FIELD] = PARAM_RAW_TRIMMED;
+        foreach ($this->results as $result) {
+            $expected[$this->field_for_result($result)] = PARAM_RAW_TRIMMED;
+        }
         return $expected;
+    }
+
+    public function start_attempt(question_attempt_step $step, $variant) {
+        $this->groupkey = $this->find_group_key((int) $step->get_user_id());
+        $step->set_qt_var(self::GROUP_VAR, $this->groupkey ?? '');
+    }
+
+    public function apply_attempt_state(question_attempt_step $step) {
+        $key = $step->get_qt_var(self::GROUP_VAR);
+        $this->groupkey = ($key === null || $key === '') ? null : $key;
+    }
+
+    /**
+     * Work out which row of the group data applies to the student starting this attempt.
+     *
+     * The question engine does not know which course an attempt belongs to, so this uses the page
+     * the attempt is being started from (the quiz), as set up by require_login().
+     *
+     * @param int $userid
+     * @return string|null
+     */
+    protected function find_group_key(int $userid): ?string {
+        global $PAGE;
+        if ($this->groupcheckmode == groupdata::MODE_OFF || !$this->get_group_rows()) {
+            return null;
+        }
+        try {
+            $cm = $PAGE->cm;
+            $courseid = $cm ? (int) $cm->course : (int) ($PAGE->course->id ?? 0);
+            $groupingid = $cm ? (int) $cm->groupingid : 0;
+            return groupdata::find_row_for_user($this->get_group_rows(), $userid, $courseid, $groupingid);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * The parsed group data.
+     *
+     * @return array normalised key => ['label' => ..., 'values' => [name => float]]
+     */
+    public function get_group_rows(): array {
+        if ($this->grouprows === null) {
+            [$this->grouprows] = groupdata::parse($this->groupdata, array_map(fn($v) => $v->name, $this->vars));
+        }
+        return $this->grouprows;
+    }
+
+    /**
+     * Normalise a number typed by a student: local decimal separator to '.', powers of ten to e-notation.
+     *
+     * @param mixed $value
+     * @return string|null null if blank.
+     */
+    public static function normalise_number($value): ?string {
+        if ($value === null) {
+            return null;
+        }
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+        $value = str_replace(['−', ' ', "\u{00A0}"], ['-', '', ''], $value);
+        $value = preg_replace('/(?:x|X|×|\*)10\^([+-]?\d+)$/u', 'e$1', $value);
+        $decsep = get_string('decsep', 'langconfig');
+        if ($decsep !== '.') {
+            $value = str_replace($decsep, '.', $value);
+        }
+        return $value;
     }
 
     /**
@@ -108,41 +198,21 @@ class qtype_labcalc_question extends question_graded_automatically {
      * @return float|null null if blank or not a valid number.
      */
     public static function parse_number($value): ?float {
-        if ($value === null) {
+        $value = self::normalise_number($value);
+        if ($value === null || !is_numeric($value) || !is_finite((float) $value)) {
             return null;
         }
-        $value = trim((string) $value);
-        if ($value === '') {
-            return null;
-        }
-        // Allow a few common ways of writing powers of ten: 1.2x10^-3, 1.2×10^-3, 1.2*10^-3.
-        $value = preg_replace('/\s*(?:x|×|\*)\s*10\s*\^\s*([+-]?\d+)$/u', 'e$1', $value);
-        // Allow a unicode minus sign.
-        $value = str_replace('−', '-', $value);
-        $number = unformat_float($value, true);
-        if ($number === false || $number === null || !is_finite((float) $number)) {
-            return null;
-        }
-        return (float) $number;
+        return (float) $value;
     }
 
     /**
-     * The display label for a variable.
+     * The display label for a variable or result.
      *
-     * @param stdClass $var
+     * @param stdClass $item
      * @return string
      */
-    public function var_label(stdClass $var): string {
-        return $var->label !== '' ? $var->label : $var->name;
-    }
-
-    /**
-     * The display label for the calculated value.
-     *
-     * @return string
-     */
-    public function result_label(): string {
-        return $this->resultlabel !== '' ? $this->resultlabel : get_string('calculatedvalue', 'qtype_labcalc');
+    public function label_for(stdClass $item): string {
+        return $item->label !== '' ? $item->label : $item->name;
     }
 
     /**
@@ -150,87 +220,194 @@ class qtype_labcalc_question extends question_graded_automatically {
      *
      * @param array $response
      * @return stdClass with fields:
-     *      status   one of 'blank', 'invalid', 'outofrange', 'formulaerror', 'correct', 'partial', 'incorrect'
-     *      message  explanation (for validation errors / feedback), may be ''
+     *      status   'blank', 'invalid', 'outofrange', 'formulaerror' or 'graded'
+     *      message  explanation for validation errors, may be ''
      *      values   name => float of the parsed experimental values
-     *      given    float|null the parsed calculated value
-     *      expected float|null value expected from the student's data
-     *      fraction float
+     *      raw      name => normalised string of every value the student typed
+     *      results  list of stdClass, one per calculated value (when graded):
+     *               name, given, expected, valuestatus ('correct'|'partial'|'incorrect'),
+     *               sigfigs (null or stdClass: required, given [min, max], ok), score
+     *      datacheck null, or stdClass: group (label or null), mismatches (list), penalised (bool)
+     *      fraction overall fraction
      */
     public function analyse_response(array $response): stdClass {
-        $result = (object) ['status' => 'blank', 'message' => '', 'values' => [],
-                'given' => null, 'expected' => null, 'fraction' => 0.0];
+        $analysis = (object) ['status' => 'blank', 'message' => '', 'values' => [], 'raw' => [],
+                'results' => [], 'datacheck' => null, 'fraction' => 0.0];
 
         $anything = false;
         $problems = [];
-        foreach ($this->vars as $var) {
-            $raw = $response[$this->field_for($var)] ?? '';
-            if (trim((string) $raw) === '') {
-                $problems[] = get_string('error_missingvalue', 'qtype_labcalc', $this->var_label($var));
+        $given = [];
+        $items = array_merge(
+            array_map(fn($v) => [$v, $this->field_for_var($v), true], $this->vars),
+            array_map(fn($r) => [$r, $this->field_for_result($r), false], $this->results)
+        );
+        foreach ($items as [$item, $field, $isvar]) {
+            $raw = self::normalise_number($response[$field] ?? null);
+            if ($raw === null) {
+                $problems[] = get_string('error_missingvalue', 'qtype_labcalc', $this->label_for($item));
                 continue;
             }
             $anything = true;
             $value = self::parse_number($raw);
             if ($value === null) {
-                $problems[] = get_string('error_notanumber', 'qtype_labcalc', $this->var_label($var));
+                $problems[] = get_string('error_notanumber', 'qtype_labcalc', $this->label_for($item));
                 continue;
             }
-            $result->values[$var->name] = $value;
-        }
-
-        $rawanswer = $response[self::ANSWER_FIELD] ?? '';
-        if (trim((string) $rawanswer) === '') {
-            $problems[] = get_string('error_missingvalue', 'qtype_labcalc', $this->result_label());
-        } else {
-            $anything = true;
-            $result->given = self::parse_number($rawanswer);
-            if ($result->given === null) {
-                $problems[] = get_string('error_notanumber', 'qtype_labcalc', $this->result_label());
+            $analysis->raw[$item->name] = $raw;
+            if ($isvar) {
+                $analysis->values[$item->name] = $value;
+            } else {
+                $given[$item->name] = $value;
             }
         }
-
         if (!$anything) {
-            return $result;
+            return $analysis;
         }
         if ($problems) {
-            $result->status = 'invalid';
-            $result->message = implode(' ', $problems);
-            return $result;
+            $analysis->status = 'invalid';
+            $analysis->message = implode(' ', $problems);
+            return $analysis;
         }
 
-        // Check each experimental value is within the instructor's plausible range.
+        // Plausible range of each measurement.
         foreach ($this->vars as $var) {
-            $value = $result->values[$var->name];
+            $value = $analysis->values[$var->name];
             if (($var->rangemin !== null && $value < $var->rangemin) ||
                     ($var->rangemax !== null && $value > $var->rangemax)) {
-                $result->status = 'outofrange';
-                $result->message = get_string('error_outofrange', 'qtype_labcalc', (object) [
-                    'label' => $this->var_label($var),
+                $analysis->status = 'outofrange';
+                $analysis->message = get_string('error_outofrange', 'qtype_labcalc', (object) [
+                    'label' => $this->label_for($var),
                     'range' => $this->describe_range($var),
                 ]);
-                return $result;
+                return $analysis;
             }
         }
 
-        try {
-            $result->expected = evaluator::evaluate($this->formula, $result->values);
-        } catch (evaluation_exception $e) {
-            $result->status = 'formulaerror';
-            $result->message = get_string('error_cannotevaluate', 'qtype_labcalc', $e->getMessage());
-            return $result;
+        // Calculated values, in order. Later formulas may use earlier results.
+        $env = $analysis->values;
+        $required = [];
+        $totalweight = 0.0;
+        $total = 0.0;
+        foreach ($this->results as $res) {
+            try {
+                $expected = evaluator::evaluate($res->formula, $env);
+            } catch (evaluation_exception $e) {
+                $analysis->status = 'formulaerror';
+                $analysis->message = get_string('error_cannotevaluate', 'qtype_labcalc', $e->getMessage());
+                $analysis->results = [];
+                return $analysis;
+            }
+            $item = (object) ['name' => $res->name, 'given' => $given[$res->name], 'expected' => $expected,
+                    'valuestatus' => 'incorrect', 'sigfigs' => null, 'score' => 0.0];
+            if (evaluator::within_tolerance($item->given, $expected, $res->tolerance, $res->tolerancetype)) {
+                $item->valuestatus = 'correct';
+                $item->score = 1.0;
+            } else if ($res->partialtolerance !== null && evaluator::within_tolerance(
+                    $item->given, $expected, $res->partialtolerance, $res->tolerancetype)) {
+                $item->valuestatus = 'partial';
+                $item->score = $res->partialfraction;
+            }
+
+            $required[$res->name] = $this->required_sigfigs($res, $analysis->raw, $required);
+            if ($res->sigfigsmode != sigfigs::MODE_OFF && $required[$res->name] !== null && $item->score > 0) {
+                $range = sigfigs::count($analysis->raw[$res->name]);
+                if ($range !== null) {
+                    $ok = sigfigs::satisfies($range, $required[$res->name], $res->sigfigsslack);
+                    $item->sigfigs = (object) ['required' => $required[$res->name], 'given' => $range, 'ok' => $ok];
+                    if (!$ok) {
+                        $item->score *= (1 - $res->sigfigspenalty);
+                    }
+                }
+            }
+
+            $analysis->results[] = $item;
+            $weight = max(0.0, $res->weight);
+            $totalweight += $weight;
+            $total += $weight * $item->score;
+            $env[$res->name] = $this->carryforward ? $item->given : $expected;
+        }
+        if ($totalweight > 0) {
+            $analysis->fraction = $total / $totalweight;
+        } else if ($analysis->results) {
+            $analysis->fraction = array_sum(array_map(fn($i) => $i->score, $analysis->results)) / count($analysis->results);
         }
 
-        if (evaluator::within_tolerance($result->given, $result->expected, $this->tolerance, $this->tolerancetype)) {
-            $result->status = 'correct';
-            $result->fraction = 1.0;
-        } else if ($this->partialtolerance !== null && evaluator::within_tolerance(
-                $result->given, $result->expected, $this->partialtolerance, $this->tolerancetype)) {
-            $result->status = 'partial';
-            $result->fraction = $this->partialfraction;
-        } else {
-            $result->status = 'incorrect';
+        $analysis->datacheck = $this->check_group_data($analysis->values);
+        if ($analysis->datacheck && $analysis->datacheck->penalised) {
+            $analysis->fraction *= (1 - $this->grouppenalty);
         }
-        return $result;
+        $analysis->status = 'graded';
+        return $analysis;
+    }
+
+    /**
+     * How many significant figures are required for a result?
+     *
+     * In automatic mode this is the fewest significant figures among the experimental values (and
+     * earlier results) that the formula uses: the usual rule for multiplication and division.
+     *
+     * @param stdClass $res
+     * @param string[] $raw normalised strings typed by the student.
+     * @param array $required name => required sig figs of earlier results.
+     * @return int|null
+     */
+    protected function required_sigfigs(stdClass $res, array $raw, array $required): ?int {
+        if ($res->sigfigsmode == sigfigs::MODE_FIXED) {
+            return max(1, $res->sigfigs);
+        }
+        if ($res->sigfigsmode != sigfigs::MODE_AUTO) {
+            return null;
+        }
+        $counts = [];
+        $varnames = array_map(fn($v) => $v->name, $this->vars);
+        foreach (evaluator::find_variables($res->formula) as $name) {
+            if (in_array($name, $varnames) && isset($raw[$name])) {
+                $range = sigfigs::count($raw[$name]);
+                if ($range) {
+                    // Be generous with ambiguous trailing zeros ("10" may mean 1 or 2 sig figs).
+                    $counts[] = $range[1];
+                }
+            } else if (isset($required[$name])) {
+                $counts[] = $required[$name];
+            }
+        }
+        return $counts ? min($counts) : null;
+    }
+
+    /**
+     * Compare the measurements with the values recorded for the student's group.
+     *
+     * @param float[] $values
+     * @return stdClass|null null if group checks are off.
+     */
+    public function check_group_data(array $values): ?stdClass {
+        if ($this->groupcheckmode == groupdata::MODE_OFF) {
+            return null;
+        }
+        $rows = $this->get_group_rows();
+        $check = (object) ['group' => null, 'mismatches' => [], 'penalised' => false];
+        if ($this->groupkey === null || !isset($rows[$this->groupkey])) {
+            return $check;
+        }
+        $row = $rows[$this->groupkey];
+        $check->group = $row['label'];
+        foreach ($this->vars as $var) {
+            if (!array_key_exists($var->name, $row['values']) || !isset($values[$var->name])) {
+                continue;
+            }
+            $recorded = $row['values'][$var->name];
+            $tolerance = groupdata::parse_tolerance($var->checktolerance);
+            if ($tolerance) {
+                $ok = evaluator::within_tolerance($values[$var->name], $recorded, $tolerance[0], $tolerance[1]);
+            } else {
+                $ok = evaluator::within_tolerance($values[$var->name], $recorded, 0, evaluator::TOLERANCE_ABSOLUTE);
+            }
+            if (!$ok) {
+                $check->mismatches[] = (object) ['var' => $var, 'recorded' => $recorded, 'given' => $values[$var->name]];
+            }
+        }
+        $check->penalised = $check->mismatches && $this->groupcheckmode == groupdata::MODE_PENALTY;
+        return $check;
     }
 
     /**
@@ -258,36 +435,24 @@ class qtype_labcalc_question extends question_graded_automatically {
     }
 
     /**
-     * Format a value for display with the configured significant figures.
+     * Describe the tolerance of a result, e.g. "±1%" or "±0.05 g/mL".
      *
-     * @param float $value
+     * @param stdClass $res
      * @return string
      */
-    public function format_value(float $value): string {
-        return evaluator::format_sigfigs($value, $this->displaysigfigs);
-    }
-
-    /**
-     * Describe the tolerance, e.g. "±1%" or "±0.05 g/mL".
-     *
-     * @param float $tolerance
-     * @return string
-     */
-    public function describe_tolerance(float $tolerance): string {
-        if ($this->tolerancetype == evaluator::TOLERANCE_RELATIVE) {
-            return '±' . format_float($tolerance, -1) . '%';
+    public function describe_tolerance(stdClass $res): string {
+        if ($res->tolerancetype == evaluator::TOLERANCE_RELATIVE) {
+            return '±' . format_float($res->tolerance, -1) . '%';
         }
-        return trim('±' . format_float($tolerance, -1) . ' ' . $this->resultunit);
+        return trim('±' . format_float($res->tolerance, -1) . ' ' . $res->unit);
     }
 
     public function is_complete_response(array $response) {
-        $status = $this->analyse_response($response)->status;
-        return !in_array($status, ['blank', 'invalid', 'outofrange', 'formulaerror']);
+        return $this->analyse_response($response)->status === 'graded';
     }
 
     public function is_gradable_response(array $response) {
-        $status = $this->analyse_response($response)->status;
-        return !in_array($status, ['blank', 'invalid']);
+        return in_array($this->analyse_response($response)->status, ['graded', 'outofrange', 'formulaerror']);
     }
 
     public function get_validation_error(array $response) {
@@ -310,13 +475,16 @@ class qtype_labcalc_question extends question_graded_automatically {
     public function summarise_response(array $response) {
         $parts = [];
         foreach ($this->vars as $var) {
-            $value = $response[$this->field_for($var)] ?? '';
+            $value = $response[$this->field_for_var($var)] ?? '';
             if ($value !== '') {
-                $parts[] = trim($this->var_label($var) . ' = ' . $value . ' ' . $var->unit);
+                $parts[] = trim($this->label_for($var) . ' = ' . $value . ' ' . $var->unit);
             }
         }
-        if (($response[self::ANSWER_FIELD] ?? '') !== '') {
-            $parts[] = trim($this->result_label() . ' = ' . $response[self::ANSWER_FIELD] . ' ' . $this->resultunit);
+        foreach ($this->results as $res) {
+            $value = $response[$this->field_for_result($res)] ?? '';
+            if ($value !== '') {
+                $parts[] = trim($this->label_for($res) . ' = ' . $value . ' ' . $res->unit);
+            }
         }
         return $parts ? implode('; ', $parts) : null;
     }
@@ -346,17 +514,30 @@ class qtype_labcalc_question extends question_graded_automatically {
     }
 
     public function get_correct_response() {
-        $values = $this->get_sample_values();
-        try {
-            $expected = evaluator::evaluate($this->formula, $values);
-        } catch (evaluation_exception $e) {
-            return null;
-        }
         $response = [];
+        $raw = [];
+        $env = $this->get_sample_values();
         foreach ($this->vars as $var) {
-            $response[$this->field_for($var)] = self::to_response_string($values[$var->name]);
+            $response[$this->field_for_var($var)] = self::to_response_string($env[$var->name]);
+            $raw[$var->name] = (string) $env[$var->name];
         }
-        $response[self::ANSWER_FIELD] = self::to_response_string($expected);
+        $required = [];
+        foreach ($this->results as $res) {
+            try {
+                $expected = evaluator::evaluate($res->formula, $env);
+            } catch (evaluation_exception $e) {
+                return null;
+            }
+            $required[$res->name] = $this->required_sigfigs($res, $raw, $required);
+            if ($res->sigfigsmode != sigfigs::MODE_OFF && $required[$res->name] !== null) {
+                $string = evaluator::format_sigfigs($expected, $required[$res->name], false);
+            } else {
+                $string = (string) $expected;
+            }
+            $raw[$res->name] = $string;
+            $response[$this->field_for_result($res)] = str_replace('.', get_string('decsep', 'langconfig'), $string);
+            $env[$res->name] = $this->carryforward ? (float) $string : $expected;
+        }
         return $response;
     }
 
@@ -367,30 +548,44 @@ class qtype_labcalc_question extends question_graded_automatically {
      * @return string
      */
     protected static function to_response_string(float $value): string {
-        $str = (string) $value;
-        return str_replace('.', get_string('decsep', 'langconfig'), $str);
+        return str_replace('.', get_string('decsep', 'langconfig'), (string) $value);
     }
 
     public function get_right_answer_summary() {
-        return get_string('rightanswersummary', 'qtype_labcalc', (object) [
-            'label' => $this->result_label(),
-            'formula' => evaluator::display_formula($this->formula),
-            'tolerance' => $this->describe_tolerance($this->tolerance),
-        ]);
+        $parts = [];
+        foreach ($this->results as $res) {
+            $parts[] = $this->label_for($res) . ' = ' . evaluator::display_formula($res->formula) .
+                    ' (' . $this->describe_tolerance($res) . ')';
+        }
+        return get_string('rightanswersummary', 'qtype_labcalc', implode('; ', $parts));
     }
 
     public function grade_response(array $response) {
-        $analysis = $this->analyse_response($response);
-        return [$analysis->fraction, question_state::graded_state_for_fraction($analysis->fraction)];
+        $fraction = $this->analyse_response($response)->fraction;
+        return [$fraction, question_state::graded_state_for_fraction($fraction)];
     }
 
     public function classify_response(array $response) {
         $analysis = $this->analyse_response($response);
-        if (in_array($analysis->status, ['blank', 'invalid'])) {
-            return [$this->id => question_classified_response::no_response()];
+        $classified = [];
+        foreach ($this->results as $i => $res) {
+            if (in_array($analysis->status, ['blank', 'invalid'])) {
+                $classified[$i] = question_classified_response::no_response();
+                continue;
+            }
+            $value = $response[$this->field_for_result($res)] ?? '';
+            if ($analysis->status !== 'graded') {
+                $classified[$i] = new question_classified_response('invalid', $value, 0);
+                continue;
+            }
+            $item = $analysis->results[$i];
+            $class = $item->valuestatus;
+            if ($class !== 'incorrect' && $item->sigfigs && !$item->sigfigs->ok) {
+                $class .= '_badsf';
+            }
+            $classified[$i] = new question_classified_response($class, $value, $item->score);
         }
-        return [$this->id => new question_classified_response($analysis->status,
-                $this->summarise_response($response), $analysis->fraction)];
+        return $classified;
     }
 
     public function check_file_access($qa, $options, $component, $filearea, $args, $forcedownload) {

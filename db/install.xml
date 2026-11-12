@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="question/type/labcalc/db" VERSION="20261111" COMMENT="XMLDB file for Moodle question/type/labcalc"
+<XMLDB PATH="question/type/labcalc/db" VERSION="20261112" COMMENT="XMLDB file for Moodle question/type/labcalc"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
 >
@@ -8,16 +8,12 @@
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Foreign key references question.id."/>
-        <FIELD NAME="formula" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Instructor formula, using {name} for each experimental value."/>
-        <FIELD NAME="resultlabel" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Label shown next to the calculated value input."/>
-        <FIELD NAME="resultunit" TYPE="char" LENGTH="100" NOTNULL="true" SEQUENCE="false" COMMENT="Unit shown after the calculated value input."/>
-        <FIELD NAME="tolerance" TYPE="char" LENGTH="255" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Tolerance for full marks."/>
-        <FIELD NAME="tolerancetype" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1 = relative (percent), 2 = absolute."/>
-        <FIELD NAME="partialtolerance" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Optional wider tolerance for partial credit. Blank = none."/>
-        <FIELD NAME="partialfraction" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.5" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction awarded within the partial credit tolerance."/>
-        <FIELD NAME="displaysigfigs" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="4" SEQUENCE="false" COMMENT="Significant figures used when showing the expected value."/>
-        <FIELD NAME="showexpected" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Show the value expected from the student's own data in feedback."/>
-        <FIELD NAME="showformula" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Show the formula in feedback."/>
+        <FIELD NAME="carryforward" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1 = when a result formula uses an earlier result, use the student's value for it (error carried forward)."/>
+        <FIELD NAME="showexpected" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Show the values expected from the student's own data in feedback."/>
+        <FIELD NAME="showformula" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Show the formulas in feedback."/>
+        <FIELD NAME="groupcheckmode" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 = off, 1 = feedback only, 2 = feedback and penalty."/>
+        <FIELD NAME="grouppenalty" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.5" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction of the mark removed when measurements do not match the group data."/>
+        <FIELD NAME="groupdata" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Table of reference values for each group."/>
         <FIELD NAME="correctfeedback" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="correctfeedbackformat" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="partiallycorrectfeedback" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
@@ -34,12 +30,38 @@
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Foreign key references question.id."/>
-        <FIELD NAME="name" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="Variable name used in the formula as {name}."/>
+        <FIELD NAME="name" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="Variable name used in formulas as {name}."/>
         <FIELD NAME="label" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Label shown to students."/>
         <FIELD NAME="unit" TYPE="char" LENGTH="100" NOTNULL="true" SEQUENCE="false" COMMENT="Unit shown to students."/>
         <FIELD NAME="rangemin" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Optional minimum acceptable value. Blank = no limit."/>
         <FIELD NAME="rangemax" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Optional maximum acceptable value. Blank = no limit."/>
-        <FIELD NAME="samplevalue" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Typical value, used to check the formula and for previews."/>
+        <FIELD NAME="samplevalue" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Typical value, used to check formulas and for previews."/>
+        <FIELD NAME="checktolerance" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Allowed difference from the group data, e.g. 2% or 0.5. Blank = exact."/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="questionid" TYPE="foreign" FIELDS="questionid" REFTABLE="question" REFFIELDS="id"/>
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="qtype_labcalc_results" COMMENT="Calculated values the student must enter for a Lab calculation question">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Foreign key references question.id."/>
+        <FIELD NAME="name" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="Name, usable as {name} in later formulas."/>
+        <FIELD NAME="label" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Label shown to students."/>
+        <FIELD NAME="unit" TYPE="char" LENGTH="100" NOTNULL="true" SEQUENCE="false" COMMENT="Unit shown to students."/>
+        <FIELD NAME="formula" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Formula using {name} placeholders."/>
+        <FIELD NAME="tolerance" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Tolerance for full marks."/>
+        <FIELD NAME="tolerancetype" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1 = relative (percent), 2 = absolute."/>
+        <FIELD NAME="partialtolerance" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Optional wider tolerance for partial credit. Blank = none."/>
+        <FIELD NAME="partialfraction" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.5" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction awarded within the partial credit tolerance."/>
+        <FIELD NAME="sigfigsmode" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 = not checked, 1 = fixed number, 2 = automatic."/>
+        <FIELD NAME="sigfigs" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="3" SEQUENCE="false" COMMENT="Required significant figures (fixed mode)."/>
+        <FIELD NAME="sigfigsslack" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of significant figures more or fewer that is still accepted."/>
+        <FIELD NAME="sigfigspenalty" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.25" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction of this result's mark removed for the wrong number of significant figures."/>
+        <FIELD NAME="weight" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="1" SEQUENCE="false" DECIMALS="7" COMMENT="Relative share of the question's mark."/>
+        <FIELD NAME="displaysigfigs" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="4" SEQUENCE="false" COMMENT="Significant figures used when showing the expected value."/>
         <FIELD NAME="sortorder" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>

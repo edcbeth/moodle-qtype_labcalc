@@ -78,11 +78,14 @@ final class backup_test extends \advanced_testcase {
         $this->assertNotEquals($question->id, $newid);
 
         $data = \question_bank::load_question_data($newid);
-        $this->assertEquals('{mass} / {volume}', $data->options->formula);
         $this->assertEquals(['mass', 'volume'], array_values(array_map(fn($v) => $v->name, $data->options->vars)));
-        $this->assertEquals('5', $data->options->partialtolerance);
+        $this->assertEquals(['density', 'error'], array_values(array_map(fn($r) => $r->name, $data->options->results)));
+        $this->assertEquals('0.2', array_values($data->options->vars)[1]->checktolerance);
+        $this->assertStringContainsString('Group B', $data->options->groupdata);
 
         $q = \question_bank::load_question($newid);
-        $this->assertEquals(1.0, $q->grade_response(['exp_mass' => '27', 'exp_volume' => '10', 'answer' => '2.7'])[0]);
+        $q->groupkey = 'group b';
+        $this->assertEquals(1.0, $q->grade_response(['exp_mass' => '27.1', 'exp_volume' => '10.0',
+                'res_density' => '2.71', 'res_error' => '0.37'])[0]);
     }
 }

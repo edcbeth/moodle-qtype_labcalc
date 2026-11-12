@@ -24,6 +24,7 @@
  */
 
 use qtype_labcalc\evaluator;
+use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -40,35 +41,39 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
         $question = $qa->get_question();
         $response = $qa->get_last_qt_data();
         $analysis = $question->analyse_response($response);
+        $graded = $options->correctness && $analysis->status === 'graded';
+        $invalid = $options->correctness && in_array($analysis->status, ['outofrange', 'formulaerror']);
 
         $output = html_writer::tag('div', $question->format_questiontext($qa), ['class' => 'qtext']);
 
         // Experimental values.
+        $mismatched = [];
+        if ($options->feedback && $analysis->datacheck) {
+            foreach ($analysis->datacheck->mismatches as $mismatch) {
+                $mismatched[$mismatch->var->name] = true;
+            }
+        }
         $rows = '';
         foreach ($question->vars as $var) {
-            $range = $question->describe_range($var);
-            $rows .= $this->input_row($qa, $options, $question->field_for($var),
-                    $question->var_label($var), $var->unit, $range, null);
+            $rows .= $this->input_row($qa, $options, $question->field_for_var($var), $question->label_for($var),
+                    $var->unit, $question->describe_range($var), null, isset($mismatched[$var->name]));
         }
-        $output .= html_writer::tag('fieldset',
-                html_writer::tag('legend', get_string('yourexperimentalvalues', 'qtype_labcalc'),
-                        ['class' => 'labcalc-legend']) .
-                html_writer::div($rows, 'labcalc-rows'),
-                ['class' => 'labcalc-group labcalc-experimental']);
+        $output .= $this->fieldset(get_string('yourexperimentalvalues', 'qtype_labcalc'), $rows, 'labcalc-experimental');
 
-        // Calculated value.
-        $fraction = null;
-        if ($options->correctness && in_array($analysis->status, ['correct', 'partial', 'incorrect', 'outofrange',
-                'formulaerror'])) {
-            $fraction = $analysis->fraction;
+        // Calculated values.
+        $rows = '';
+        foreach ($question->results as $i => $res) {
+            $fraction = null;
+            if ($graded) {
+                $fraction = $analysis->results[$i]->score;
+            } else if ($invalid) {
+                $fraction = 0.0;
+            }
+            $rows .= $this->input_row($qa, $options, $question->field_for_result($res), $question->label_for($res),
+                    $res->unit, '', $fraction, false);
         }
-        $row = $this->input_row($qa, $options, qtype_labcalc_question::ANSWER_FIELD,
-                $question->result_label(), $question->resultunit, '', $fraction);
-        $output .= html_writer::tag('fieldset',
-                html_writer::tag('legend', get_string('yourcalculatedvalue', 'qtype_labcalc'),
-                        ['class' => 'labcalc-legend']) .
-                html_writer::div($row, 'labcalc-rows'),
-                ['class' => 'labcalc-group labcalc-result']);
+        $legend = count($question->results) > 1 ? 'yourcalculatedvalues' : 'yourcalculatedvalue';
+        $output .= $this->fieldset(get_string($legend, 'qtype_labcalc'), $rows, 'labcalc-result');
 
         if ($qa->get_state() == question_state::$invalid) {
             $output .= html_writer::nonempty_tag('div', $question->get_validation_error($response),
@@ -76,6 +81,20 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
         }
 
         return html_writer::div($output, 'ablock labcalc');
+    }
+
+    /**
+     * Wrap rows in a fieldset with a legend.
+     *
+     * @param string $legend
+     * @param string $rows HTML
+     * @param string $class
+     * @return string HTML
+     */
+    protected function fieldset(string $legend, string $rows, string $class): string {
+        return html_writer::tag('fieldset',
+                html_writer::tag('legend', $legend, ['class' => 'labcalc-legend']) . html_writer::div($rows, 'labcalc-rows'),
+                ['class' => 'labcalc-group ' . $class]);
     }
 
     /**
@@ -88,10 +107,11 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
      * @param string $unit
      * @param string $hint extra text, e.g. acceptable range.
      * @param float|null $fraction show a correctness icon for this fraction, or null for none.
+     * @param bool $mismatch mark this measurement as not matching the group data.
      * @return string HTML
      */
     protected function input_row(question_attempt $qa, question_display_options $options, string $field,
-            string $label, string $unit, string $hint, ?float $fraction): string {
+            string $label, string $unit, string $hint, ?float $fraction, bool $mismatch): string {
         $inputname = $qa->get_qt_field_name($field);
         $attributes = [
             'type' => 'text',
@@ -106,25 +126,30 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
         if ($options->readonly) {
             $attributes['readonly'] = 'readonly';
         }
-        $feedbackimg = '';
+        $after = '';
         if ($fraction !== null) {
             $attributes['class'] .= ' ' . $this->feedback_class($fraction);
-            $feedbackimg = $this->feedback_image($fraction);
+            $after = $this->feedback_image($fraction);
+        }
+        if ($mismatch) {
+            $attributes['class'] .= ' labcalc-mismatch';
+            $after .= html_writer::span(get_string('doesnotmatchgroup', 'qtype_labcalc'), 'labcalc-mismatch-note');
         }
         if ($hint !== '') {
             $attributes['aria-describedby'] = $inputname . '_hint';
         }
 
-        $labelhtml = html_writer::label(format_string($label), $inputname, false, ['class' => 'labcalc-label']);
         $control = html_writer::empty_tag('input', $attributes);
         if ($unit !== '') {
             $control .= html_writer::span(format_string($unit), 'labcalc-unit');
         }
-        $control .= $feedbackimg;
+        $control .= $after;
         if ($hint !== '') {
             $control .= html_writer::span(s($hint), 'labcalc-hint text-muted', ['id' => $inputname . '_hint']);
         }
-        return html_writer::div($labelhtml . html_writer::span($control, 'labcalc-control'), 'labcalc-row');
+        return html_writer::div(
+                html_writer::label(format_string($label), $inputname, false, ['class' => 'labcalc-label']) .
+                html_writer::span($control, 'labcalc-control'), 'labcalc-row');
     }
 
     protected function specific_feedback(question_attempt $qa) {
@@ -136,6 +161,51 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
         if (in_array($analysis->status, ['outofrange', 'formulaerror'])) {
             $output .= html_writer::div(s($analysis->message), 'labcalc-problem');
         }
+
+        // Significant figures.
+        $sfnotes = [];
+        foreach ($analysis->results as $i => $item) {
+            if ($item->sigfigs && !$item->sigfigs->ok) {
+                $res = $question->results[$i];
+                $sfnotes[] = html_writer::tag('li', get_string('sigfigswrong', 'qtype_labcalc', (object) [
+                    'label' => format_string($question->label_for($res)),
+                    'given' => sigfigs::describe($item->sigfigs->given),
+                    'required' => $item->sigfigs->required,
+                    'penalty' => format_float($res->sigfigspenalty * 100, -1),
+                ]));
+            }
+        }
+        if ($sfnotes) {
+            $output .= html_writer::div(html_writer::tag('ul', implode('', $sfnotes)), 'labcalc-sigfigs');
+        }
+
+        // Group data.
+        $check = $analysis->datacheck;
+        if ($check && $analysis->status === 'graded') {
+            if ($check->group === null) {
+                $output .= html_writer::div(get_string('groupcheck_nogroup', 'qtype_labcalc'), 'labcalc-groupcheck');
+            } else if ($check->mismatches) {
+                $items = '';
+                foreach ($check->mismatches as $m) {
+                    $items .= html_writer::tag('li', get_string('groupcheck_mismatchitem', 'qtype_labcalc', (object) [
+                        'label' => format_string($question->label_for($m->var)),
+                        'given' => format_float($m->given, -1),
+                        'recorded' => format_float($m->recorded, -1),
+                        'unit' => format_string($m->var->unit),
+                    ]));
+                }
+                $text = get_string('groupcheck_mismatch', 'qtype_labcalc', format_string($check->group)) .
+                        html_writer::tag('ul', $items);
+                if ($check->penalised) {
+                    $text .= get_string('groupcheck_penalty', 'qtype_labcalc', format_float($question->grouppenalty * 100, -1));
+                }
+                $output .= html_writer::div($text, 'labcalc-groupcheck labcalc-problem');
+            } else {
+                $output .= html_writer::div(get_string('groupcheck_ok', 'qtype_labcalc', format_string($check->group)),
+                        'labcalc-groupcheck');
+            }
+        }
+
         $output .= $this->combined_feedback($qa);
         return $output;
     }
@@ -144,21 +214,35 @@ class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {
         /** @var qtype_labcalc_question $question */
         $question = $qa->get_question();
         $analysis = $question->analyse_response($qa->get_last_qt_data());
-        $output = '';
+        $items = '';
 
-        if ($question->showexpected && $analysis->expected !== null) {
-            $output .= html_writer::div(get_string('expectedfromyourdata', 'qtype_labcalc', (object) [
-                'label' => format_string($question->result_label()),
-                'value' => $question->format_value($analysis->expected),
-                'unit' => format_string($question->resultunit),
-                'tolerance' => $question->describe_tolerance($question->tolerance),
-            ]), 'labcalc-expected');
+        foreach ($question->results as $i => $res) {
+            $parts = [];
+            $item = $analysis->results[$i] ?? null;
+            if ($question->showexpected && $item) {
+                $a = (object) [
+                    'label' => format_string($question->label_for($res)),
+                    'value' => evaluator::format_sigfigs($item->expected, $res->displaysigfigs),
+                    'unit' => format_string($res->unit),
+                    'tolerance' => $question->describe_tolerance($res),
+                ];
+                $parts[] = get_string('expectedfromyourdata', 'qtype_labcalc', $a);
+                if ($item->sigfigs) {
+                    $parts[] = get_string('sigfigsexpected', 'qtype_labcalc', $item->sigfigs->required);
+                }
+            }
+            if ($question->showformula) {
+                $parts[] = html_writer::tag('code', s(format_string($question->label_for($res)) . ' = ' .
+                        evaluator::display_formula($res->formula)));
+            }
+            if ($parts) {
+                $items .= html_writer::tag('li', implode(' ', $parts));
+            }
         }
-        if ($question->showformula) {
-            $output .= html_writer::div(get_string('formulaused', 'qtype_labcalc',
-                    html_writer::tag('code', s(format_string($question->result_label()) . ' = ' .
-                            evaluator::display_formula($question->formula)))), 'labcalc-formula');
+        if ($items === '') {
+            return '';
         }
-        return $output;
+        $intro = $question->showexpected && $analysis->results ? get_string('usingyourdata', 'qtype_labcalc') : '';
+        return $intro . html_writer::tag('ul', $items, ['class' => 'labcalc-expected']);
     }
 }

@@ -46,3 +46,18 @@
     font-weight: bold;
     margin-bottom: 0.5rem;
 }
+
+.que.labcalc .labcalc-mismatch {
+    border-color: #f0ad4e;
+}
+
+.que.labcalc .labcalc-mismatch-note {
+    font-size: 0.875em;
+    color: #8a5300;
+}
+
+.que.labcalc .labcalc-sigfigs ul,
+.que.labcalc .labcalc-groupcheck ul,
+.que .rightanswer ul.labcalc-expected {
+    margin-bottom: 0.5rem;
+}
