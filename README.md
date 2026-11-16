@@ -97,9 +97,16 @@ Moodle 4.1 or later. Tested on Moodle 4.5 (PostgreSQL) and Moodle 5.3 (MySQL).
 
 ## Installation and upgrading
 
-Copy the `labcalc` folder to `question/type/labcalc` in your Moodle code (for Moodle 5.1+,
+Install from the Moodle Plugins directory (*Site administration → Plugins → Install plugins*), or
+put this repository's files in `question/type/labcalc` in your Moodle code (for Moodle 5.1+,
 `public/question/type/labcalc`), replacing any older version, then visit
-*Site administration → Notifications*.
+*Site administration → Notifications*. With git:
+
+```
+git clone https://github.com/edcbeth/moodle-qtype_labcalc.git question/type/labcalc
+```
+
+Please report bugs and suggestions at https://github.com/edcbeth/moodle-qtype_labcalc/issues.
 
 Upgrading from 1.0 or 2.0 keeps existing questions and saved quiz attempts working, with the same
 marks. (From 1.0, each question's calculated value becomes the first calculated value, named
