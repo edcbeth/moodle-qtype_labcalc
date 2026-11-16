@@ -138,5 +138,30 @@ function xmldb_qtype_labcalc_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026111200, 'qtype', 'labcalc');
     }
 
+    if ($oldversion < 2026111600) {
+        // Version 3.0: compare calculated values with a known (accepted / theoretical) value.
+        $table = new xmldb_table('qtype_labcalc_results');
+        $fields = [
+            new xmldb_field('knownmode', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'displaysigfigs'),
+            new xmldb_field('knownformula', XMLDB_TYPE_TEXT, null, null, null, null, null, 'knownmode'),
+            new xmldb_field('knowncompare', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '0', 'knownformula'),
+            new xmldb_field('accuracytolerance', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, '5', 'knowncompare'),
+            new xmldb_field('accuracytolerancetype', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '1',
+                    'accuracytolerance'),
+            new xmldb_field('accuracypartialtolerance', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null,
+                    'accuracytolerancetype'),
+            new xmldb_field('accuracypartialfraction', XMLDB_TYPE_NUMBER, '12, 7', null, XMLDB_NOTNULL, null, '0.5',
+                    'accuracypartialtolerance'),
+            new xmldb_field('accuracyweight', XMLDB_TYPE_NUMBER, '12, 7', null, XMLDB_NOTNULL, null, '0.25',
+                    'accuracypartialfraction'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026111600, 'qtype', 'labcalc');
+    }
+
     return true;
 }

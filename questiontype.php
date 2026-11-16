@@ -25,6 +25,7 @@
 
 use qtype_labcalc\evaluator;
 use qtype_labcalc\groupdata;
+use qtype_labcalc\knownvalue;
 use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
@@ -53,7 +54,9 @@ class qtype_labcalc extends question_type {
 
     /** @var string[] Fields stored per calculated value. */
     const RESULT_FIELDS = ['name', 'label', 'unit', 'formula', 'tolerance', 'tolerancetype', 'partialtolerance',
-            'partialfraction', 'sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight', 'displaysigfigs'];
+            'partialfraction', 'sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight', 'displaysigfigs',
+            'knownmode', 'knownformula', 'knowncompare', 'accuracytolerance', 'accuracytolerancetype',
+            'accuracypartialtolerance', 'accuracypartialfraction', 'accuracyweight'];
 
     /** @var array form field name => result field name. */
     const RESULT_FORM_FIELDS = [
@@ -62,6 +65,10 @@ class qtype_labcalc extends question_type {
         'respartialtolerance' => 'partialtolerance', 'respartialfraction' => 'partialfraction',
         'ressigfigsmode' => 'sigfigsmode', 'ressigfigs' => 'sigfigs', 'ressigfigsslack' => 'sigfigsslack',
         'ressigfigspenalty' => 'sigfigspenalty', 'resweight' => 'weight', 'resdisplaysigfigs' => 'displaysigfigs',
+        'resknownmode' => 'knownmode', 'resknownformula' => 'knownformula', 'resknowncompare' => 'knowncompare',
+        'resaccuracytolerance' => 'accuracytolerance', 'resaccuracytolerancetype' => 'accuracytolerancetype',
+        'resaccuracypartialtolerance' => 'accuracypartialtolerance',
+        'resaccuracypartialfraction' => 'accuracypartialfraction', 'resaccuracyweight' => 'accuracyweight',
     ];
 
     /** @var array form field name => variable field name. */
@@ -157,6 +164,14 @@ class qtype_labcalc extends question_type {
                 'sigfigspenalty' => (float) ($formdata->ressigfigspenalty[$i] ?? 0.25),
                 'weight' => (float) self::clean_number($formdata->resweight[$i] ?? '1', '1'),
                 'displaysigfigs' => (int) ($formdata->resdisplaysigfigs[$i] ?? 4),
+                'knownmode' => (int) ($formdata->resknownmode[$i] ?? knownvalue::MODE_OFF),
+                'knownformula' => trim($formdata->resknownformula[$i] ?? ''),
+                'knowncompare' => (int) ($formdata->resknowncompare[$i] ?? knownvalue::COMPARE_REPORTED),
+                'accuracytolerance' => self::clean_number($formdata->resaccuracytolerance[$i] ?? '5', '5'),
+                'accuracytolerancetype' => (int) ($formdata->resaccuracytolerancetype[$i] ?? evaluator::TOLERANCE_RELATIVE),
+                'accuracypartialtolerance' => self::clean_number($formdata->resaccuracypartialtolerance[$i] ?? '', ''),
+                'accuracypartialfraction' => (float) ($formdata->resaccuracypartialfraction[$i] ?? 0.5),
+                'accuracyweight' => (float) ($formdata->resaccuracyweight[$i] ?? 0.25),
                 'sortorder' => $sortorder++,
             ]);
         }
@@ -224,6 +239,14 @@ class qtype_labcalc extends question_type {
                 'sigfigspenalty' => (float) $res->sigfigspenalty,
                 'weight' => (float) $res->weight,
                 'displaysigfigs' => (int) $res->displaysigfigs,
+                'knownmode' => (int) ($res->knownmode ?? knownvalue::MODE_OFF),
+                'knownformula' => trim((string) ($res->knownformula ?? '')),
+                'knowncompare' => (int) ($res->knowncompare ?? knownvalue::COMPARE_REPORTED),
+                'accuracytolerance' => (float) ($res->accuracytolerance ?? 5),
+                'accuracytolerancetype' => (int) ($res->accuracytolerancetype ?? evaluator::TOLERANCE_RELATIVE),
+                'accuracypartialtolerance' => $num($res->accuracypartialtolerance ?? ''),
+                'accuracypartialfraction' => (float) ($res->accuracypartialfraction ?? 0.5),
+                'accuracyweight' => (float) ($res->accuracyweight ?? 0.25),
             ];
         }
         $this->initialise_combined_feedback($question, $questiondata, false);
@@ -340,7 +363,10 @@ class qtype_labcalc extends question_type {
 
         $resultdefaults = ['tolerance' => '1', 'tolerancetype' => evaluator::TOLERANCE_RELATIVE,
                 'partialfraction' => 0.5, 'sigfigsmode' => sigfigs::MODE_OFF, 'sigfigs' => 3, 'sigfigsslack' => 0,
-                'sigfigspenalty' => 0.25, 'weight' => 1, 'displaysigfigs' => 4];
+                'sigfigspenalty' => 0.25, 'weight' => 1, 'displaysigfigs' => 4,
+                'knownmode' => knownvalue::MODE_OFF, 'knowncompare' => knownvalue::COMPARE_REPORTED,
+                'accuracytolerance' => '5', 'accuracytolerancetype' => evaluator::TOLERANCE_RELATIVE,
+                'accuracypartialfraction' => 0.5, 'accuracyweight' => 0.25];
         foreach (self::RESULT_FORM_FIELDS as $formfield => $field) {
             $qo->$formfield = [];
         }
@@ -362,8 +388,10 @@ class qtype_labcalc extends question_type {
                 $qo->{'res' . $field}[0] = $format->getpath($data, ['#', $field, 0, '#'],
                         $resultdefaults[$field] ?? '', true);
             }
-            foreach (['sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight'] as $field) {
-                $qo->{'res' . $field}[0] = $resultdefaults[$field];
+            foreach (self::RESULT_FORM_FIELDS as $formfield => $field) {
+                if (!isset($qo->{$formfield}[0])) {
+                    $qo->{$formfield}[0] = $resultdefaults[$field] ?? '';
+                }
             }
         }
 

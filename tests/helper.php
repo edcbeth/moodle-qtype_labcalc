@@ -25,6 +25,7 @@
 
 use qtype_labcalc\evaluator;
 use qtype_labcalc\groupdata;
+use qtype_labcalc\knownvalue;
 use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
@@ -43,8 +44,13 @@ class qtype_labcalc_test_helper extends question_test_helper {
     /** @var string Group data used by the test question. */
     const GROUPDATA = "group, mass, volume\nGroup A, 26.4, 9.8\nGroup B, 27.1, 10.0";
 
+    /** @var array Settings for a calculated value that is not compared with a known value. */
+    const NO_KNOWN = ['knownmode' => knownvalue::MODE_OFF, 'knownformula' => '', 'knowncompare' => knownvalue::COMPARE_REPORTED,
+            'accuracytolerance' => 5.0, 'accuracytolerancetype' => evaluator::TOLERANCE_RELATIVE,
+            'accuracypartialtolerance' => null, 'accuracypartialfraction' => 0.5, 'accuracyweight' => 0.25];
+
     public function get_test_questions() {
-        return ['density'];
+        return ['density', 'accuracy'];
     }
 
     /**
@@ -76,17 +82,17 @@ class qtype_labcalc_test_helper extends question_test_helper {
                     'rangemin' => 0.1, 'rangemax' => null, 'samplevalue' => 10.0, 'checktolerance' => '0.2'],
         ];
         $q->results = [
-            (object) ['name' => 'density', 'label' => 'Density', 'unit' => 'g/mL', 'formula' => '{mass} / {volume}',
+            (object) (['name' => 'density', 'label' => 'Density', 'unit' => 'g/mL', 'formula' => '{mass} / {volume}',
                     'tolerance' => 1.0, 'tolerancetype' => evaluator::TOLERANCE_RELATIVE,
                     'partialtolerance' => 5.0, 'partialfraction' => 0.5,
                     'sigfigsmode' => sigfigs::MODE_AUTO, 'sigfigs' => 3, 'sigfigsslack' => 0, 'sigfigspenalty' => 0.25,
-                    'weight' => 2.0, 'displaysigfigs' => 4],
-            (object) ['name' => 'error', 'label' => 'Percent error', 'unit' => '%',
+                    'weight' => 2.0, 'displaysigfigs' => 4] + self::NO_KNOWN),
+            (object) (['name' => 'error', 'label' => 'Percent error', 'unit' => '%',
                     'formula' => '100 * abs({density} - 2.70) / 2.70',
                     'tolerance' => 0.5, 'tolerancetype' => evaluator::TOLERANCE_ABSOLUTE,
                     'partialtolerance' => null, 'partialfraction' => 0.5,
                     'sigfigsmode' => sigfigs::MODE_FIXED, 'sigfigs' => 2, 'sigfigsslack' => 0, 'sigfigspenalty' => 0.5,
-                    'weight' => 1.0, 'displaysigfigs' => 3],
+                    'weight' => 1.0, 'displaysigfigs' => 3] + self::NO_KNOWN),
         ];
         test_question_maker::set_standard_combined_feedback_fields($q);
         return $q;
@@ -134,6 +140,59 @@ class qtype_labcalc_test_helper extends question_test_helper {
         test_question_maker::set_standard_combined_feedback_form_data($form);
         $form->penalty = '0.3333333';
         $form->hint = [];
+        return $form;
+    }
+    /**
+     * A density question compared with the known density of aluminium, 2.70 g/mL:
+     *  - density = {mass} / {volume}, ±1%, weight 1; known value 2.70, graded: 25% of its mark for
+     *    accuracy, full within ±2%, half within ±5%;
+     *  - error = 100 * abs({density} - {density_known}) / {density_known}, ±0.5 absolute, weight 1.
+     * Group B was given a copper block, so its known density is 8.96.
+     *
+     * @return qtype_labcalc_question
+     */
+    public function make_labcalc_question_accuracy() {
+        $q = $this->make_labcalc_question_density();
+        $q->name = 'Density of a metal block, compared with the known value';
+        $q->groupcheckmode = groupdata::MODE_OFF;
+        $q->groupdata = "group, density_known\nGroup B, 8.96";
+        $q->results[0] = (object) (['name' => 'density', 'label' => 'Density', 'unit' => 'g/mL',
+                'formula' => '{mass} / {volume}', 'tolerance' => 1.0, 'tolerancetype' => evaluator::TOLERANCE_RELATIVE,
+                'partialtolerance' => null, 'partialfraction' => 0.5, 'sigfigsmode' => sigfigs::MODE_OFF, 'sigfigs' => 3,
+                'sigfigsslack' => 0, 'sigfigspenalty' => 0.25, 'weight' => 1.0, 'displaysigfigs' => 3,
+                'knownmode' => knownvalue::MODE_GRADED, 'knownformula' => '2.70', 'knowncompare' => knownvalue::COMPARE_REPORTED,
+                'accuracytolerance' => 2.0, 'accuracytolerancetype' => evaluator::TOLERANCE_RELATIVE,
+                'accuracypartialtolerance' => 5.0, 'accuracypartialfraction' => 0.5, 'accuracyweight' => 0.25]);
+        $q->results[1] = (object) (['name' => 'error', 'label' => 'Percent error', 'unit' => '%',
+                'formula' => '100 * abs({density} - {density_known}) / {density_known}',
+                'tolerance' => 0.5, 'tolerancetype' => evaluator::TOLERANCE_ABSOLUTE,
+                'partialtolerance' => null, 'partialfraction' => 0.5, 'sigfigsmode' => sigfigs::MODE_OFF, 'sigfigs' => 2,
+                'sigfigsslack' => 0, 'sigfigspenalty' => 0.5, 'weight' => 1.0, 'displaysigfigs' => 3] + self::NO_KNOWN);
+        return $q;
+    }
+
+    /**
+     * Form data for creating the accuracy question through the question generator.
+     *
+     * @return stdClass
+     */
+    public function get_labcalc_question_form_data_accuracy() {
+        $form = $this->get_labcalc_question_form_data_density();
+        $form->name = 'Density of a metal block, compared with the known value';
+        $form->groupcheckmode = groupdata::MODE_OFF;
+        $form->groupdata = "group, density_known\nGroup B, 8.96";
+        $form->resformula = ['{mass} / {volume}', '100 * abs({density} - {density_known}) / {density_known}'];
+        $form->respartialtolerance = ['', ''];
+        $form->ressigfigsmode = [sigfigs::MODE_OFF, sigfigs::MODE_OFF];
+        $form->resweight = ['1', '1'];
+        $form->resknownmode = [knownvalue::MODE_GRADED, knownvalue::MODE_OFF];
+        $form->resknownformula = ['2.70', ''];
+        $form->resknowncompare = [knownvalue::COMPARE_REPORTED, knownvalue::COMPARE_REPORTED];
+        $form->resaccuracytolerance = ['2', '5'];
+        $form->resaccuracytolerancetype = [evaluator::TOLERANCE_RELATIVE, evaluator::TOLERANCE_RELATIVE];
+        $form->resaccuracypartialtolerance = ['5', ''];
+        $form->resaccuracypartialfraction = ['0.5', '0.5'];
+        $form->resaccuracyweight = ['0.25', '0.25'];
         return $form;
     }
 }

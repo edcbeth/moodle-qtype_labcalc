@@ -55,7 +55,9 @@ class backup_qtype_labcalc_plugin extends backup_qtype_plugin {
         $results = new backup_nested_element('labcalc_results');
         $result = new backup_nested_element('labcalc_result', ['id'], [
             'name', 'label', 'unit', 'formula', 'tolerance', 'tolerancetype', 'partialtolerance', 'partialfraction',
-            'sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight', 'displaysigfigs', 'sortorder',
+            'sigfigsmode', 'sigfigs', 'sigfigsslack', 'sigfigspenalty', 'weight', 'displaysigfigs',
+            'knownmode', 'knownformula', 'knowncompare', 'accuracytolerance', 'accuracytolerancetype',
+            'accuracypartialtolerance', 'accuracypartialfraction', 'accuracyweight', 'sortorder',
         ]);
 
         $pluginwrapper->add_child($options);

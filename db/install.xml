@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="question/type/labcalc/db" VERSION="20261112" COMMENT="XMLDB file for Moodle question/type/labcalc"
+<XMLDB PATH="question/type/labcalc/db" VERSION="20261116" COMMENT="XMLDB file for Moodle question/type/labcalc"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
 >
@@ -62,6 +62,14 @@
         <FIELD NAME="sigfigspenalty" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.25" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction of this result's mark removed for the wrong number of significant figures."/>
         <FIELD NAME="weight" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="1" SEQUENCE="false" DECIMALS="7" COMMENT="Relative share of the question's mark."/>
         <FIELD NAME="displaysigfigs" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="4" SEQUENCE="false" COMMENT="Significant figures used when showing the expected value."/>
+        <FIELD NAME="knownmode" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Compare with a known value: 0 = no, 1 = feedback only, 2 = graded."/>
+        <FIELD NAME="knownformula" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The known (accepted / theoretical) value: a number or a formula."/>
+        <FIELD NAME="knowncompare" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 = compare the student's reported value, 1 = compare the value correctly calculated from the student's measurements."/>
+        <FIELD NAME="accuracytolerance" TYPE="char" LENGTH="255" NOTNULL="true" DEFAULT="5" SEQUENCE="false" COMMENT="Tolerance for full accuracy marks."/>
+        <FIELD NAME="accuracytolerancetype" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1 = relative (percent), 2 = absolute."/>
+        <FIELD NAME="accuracypartialtolerance" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Optional wider tolerance for partial accuracy marks. Blank = none."/>
+        <FIELD NAME="accuracypartialfraction" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.5" SEQUENCE="false" DECIMALS="7" COMMENT="Fraction of the accuracy marks within the partial tolerance."/>
+        <FIELD NAME="accuracyweight" TYPE="number" LENGTH="12" NOTNULL="true" DEFAULT="0.25" SEQUENCE="false" DECIMALS="7" COMMENT="Share of this value's marks given for accuracy (graded mode)."/>
         <FIELD NAME="sortorder" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>

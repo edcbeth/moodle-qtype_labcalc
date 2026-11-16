@@ -97,6 +97,14 @@ class restore_qtype_labcalc_plugin extends restore_qtype_plugin {
                 'sigfigspenalty' => 0.25,
                 'weight' => 1,
                 'displaysigfigs' => (int) ($data->displaysigfigs ?? 4),
+                'knownmode' => 0,
+                'knownformula' => '',
+                'knowncompare' => 0,
+                'accuracytolerance' => '5',
+                'accuracytolerancetype' => 1,
+                'accuracypartialtolerance' => '',
+                'accuracypartialfraction' => 0.5,
+                'accuracyweight' => 0.25,
                 'sortorder' => 0,
             ]);
         }
@@ -141,6 +149,15 @@ class restore_qtype_labcalc_plugin extends restore_qtype_plugin {
             return;
         }
         $data->questionid = $this->get_new_parentid('question');
+        // Fields added in version 3.0.
+        $defaults = ['knownmode' => 0, 'knownformula' => '', 'knowncompare' => 0, 'accuracytolerance' => '5',
+                'accuracytolerancetype' => 1, 'accuracypartialtolerance' => '', 'accuracypartialfraction' => 0.5,
+                'accuracyweight' => 0.25];
+        foreach ($defaults as $field => $default) {
+            if (!isset($data->$field)) {
+                $data->$field = $default;
+            }
+        }
         $newitemid = $DB->insert_record('qtype_labcalc_results', $data);
         $this->set_mapping('qtype_labcalc_results', $data->id, $newitemid);
     }

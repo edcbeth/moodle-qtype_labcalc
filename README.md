@@ -10,7 +10,8 @@ Moodle works out each correct answer by putting **the student's own measurements
 data and still be marked fairly on whether they did the calculations correctly.
 
 Optionally it also checks that answers are reported to the right number of **significant figures**,
-and compares each student's measurements with the values **their lab group recorded**.
+compares each student's measurements with the values **their lab group recorded**, and compares
+their findings with a **known (accepted or theoretical) value**, with marks for accuracy if you wish.
 
 ## Example
 
@@ -31,6 +32,12 @@ A student in Group B enters 27.1 g, 10.0 mL, density 2.71 g/mL and error 0.37 % 
 * A student in Group A who reports 27.1 g when their group recorded 26.4 g is told so in the
   feedback, and (if you choose) their mark is reduced.
 
+**Known value example.** Give the density a known value of `2.70` and award 25 % of its mark for
+accuracy (full within ±2 %, half within ±5 %). A student whose measurements give 2.80 g/mL, and who
+calculates that correctly, gets the calculation marks plus half the accuracy marks, and is told
+*"your value of 2.80 g/mL is 3.70% from the known value of 2.70 g/mL"*. The percent error can then
+be written as `100 * abs({density} - {density_known}) / {density_known}`.
+
 ## Features
 
 **Experimental values** – any number, each with a name (used in formulas as `{name}`), a label,
@@ -50,6 +57,20 @@ Formulas are evaluated with Moodle's built-in safe maths parser (the same one as
 no PHP `eval` of user input). Supports `+ - * / ^ **`, brackets, `sqrt abs ln log exp sin cos tan
 asin acos atan pi() power min max average sum round floor ceil`, and e-notation.
 
+**Known values** – each calculated value can be compared with a known (accepted, literature or
+theoretical) value: a number, or a formula using the measurements (e.g. a theoretical yield from the
+reactant mass the student weighed).
+
+* *Feedback only* – students are told how far their finding is from the known value (as a
+  percentage, or as a difference when the known value is zero).
+* *Graded* – a share of that value's mark (e.g. 25 %) is for accuracy, with an accepted accuracy
+  (relative or absolute) and optional partial credit.
+* Compare either the value the student **reported**, or the value **calculated correctly from their
+  measurements** (which judges the experiment alone, so an arithmetic slip is not penalised twice).
+* Later formulas can use the known value as `{name_known}`.
+* If groups were given different samples, put each group's known value in the group data table in
+  a `name_known` column (e.g. `density_known`).
+
 **Error carried forward** – when a formula uses an earlier calculated value, it can use the
 student's value (default) or the correct one.
 
@@ -58,12 +79,12 @@ decimal point, trailing zeros are. Trailing zeros in a whole number (`2700`) are
 are accepted as any of the possible counts (2, 3 or 4). Students can write `2.70e3` or
 `2.70x10^3` to be explicit.
 
-**Group data checks** – paste a table of the values each lab group recorded (from a spreadsheet,
+**Group data** – paste a table of the values each lab group recorded (from a spreadsheet,
 comma, semicolon or tab separated). When a student starts the quiz, their group is found from the
 course groups (by group name or ID number, within the quiz's grouping if it has one). Their
 measurements are compared with the group's using each value's allowed difference (e.g. `2%` or
 `0.5`). Choose *feedback only* or *feedback and mark reduction*. Students not in a listed group are
-not checked.
+not checked. The same table can give each group's known values (see above).
 
 Also: numbers in the local decimal format, e-notation or `1.2x10^-3`; range checks that ask the
 student to re-check implausible measurements; combined feedback and hints; all quiz behaviours;
@@ -80,9 +101,10 @@ Copy the `labcalc` folder to `question/type/labcalc` in your Moodle code (for Mo
 `public/question/type/labcalc`), replacing any older version, then visit
 *Site administration → Notifications*.
 
-Upgrading from 1.0 converts each existing question's calculated value into the first (and only)
-calculated value, named `result`, and updates saved quiz attempts to match. Nothing else changes
-for existing questions until you edit them.
+Upgrading from 1.0 or 2.0 keeps existing questions and saved quiz attempts working, with the same
+marks. (From 1.0, each question's calculated value becomes the first calculated value, named
+`result`, and saved attempts are updated to match.) Known-value comparison is off for existing
+questions until you edit them.
 
 ### Troubleshooting: "Table 'mdl_qtype_labcalc_options' already exists"
 
@@ -103,7 +125,9 @@ In the question bank choose **Add → Lab calculation**.
 1. **Experimental values** – one row per measurement.
 2. **Calculated values** – one block per value the students calculate. A later formula can use an
    earlier value, e.g. `{density}`.
-3. **Group data checks** (optional) – choose a mode and paste the group data table.
+   For each one you can also set a **known value** to compare students' findings with.
+3. **Group data** (optional) – choose whether to check measurements, and paste the group data
+   table (which can also hold per-group known values).
 4. **Calculation and feedback options** – carry errors forward, show expected values / formulas.
 
 Tip: use *Preview → Fill in correct responses* to see the question answered with your sample

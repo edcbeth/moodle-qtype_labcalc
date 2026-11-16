@@ -25,6 +25,14 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['accuracy_accurate'] = 'This is within the accepted accuracy ({$a->tolerance}).';
+$string['accuracy_inaccurate'] = 'This is outside the accepted accuracy ({$a->tolerance}), so the accuracy part of this value\'s mark ({$a->weight}%) was not awarded.';
+$string['accuracy_partial'] = 'This is outside the accepted accuracy ({$a->tolerance}) but close enough for {$a->partial}% of the accuracy marks.';
+$string['accuracypartial'] = 'Partial accuracy credit (optional)';
+$string['accuracytolerance'] = 'Accepted accuracy';
+$string['accuracytolerance_help'] = 'How close the finding must be to the known value to earn the accuracy marks. A relative tolerance is a percentage of the known value (e.g. 5 means within 5%); an absolute tolerance is in this value\'s unit.';
+$string['accuracyweight'] = 'Share of this value\'s mark for accuracy';
+$string['accuracyweight_help'] = 'The rest of this value\'s mark is for calculating it correctly from the student\'s own measurements. For example, 25% means a correct calculation earns 75% of this value\'s marks, and being within the accepted accuracy of the known value earns the other 25%.';
 $string['addmoreresults'] = 'Add another calculated value';
 $string['addmorevars'] = 'Add another experimental value';
 $string['calculatedvalues'] = 'Calculated values';
@@ -43,6 +51,8 @@ $string['error_formulaempty'] = 'Please enter a formula.';
 $string['error_formulaequals'] = 'Enter only the right-hand side of the formula, for example {mass} / {volume}, without "result =".';
 $string['error_formulainvalid'] = 'The formula could not be evaluated using the sample values: {$a}';
 $string['error_groupdatarequired'] = 'Enter the data recorded for each group, or turn group data checks off.';
+$string['error_knownrequired'] = 'Enter the known value or formula, or give it for every group in the group data in a column headed {$a}.';
+$string['error_knownsuffix'] = 'Names ending in "_known" are reserved for known values.';
 $string['error_minmax'] = 'The minimum must not be greater than the maximum.';
 $string['error_missingvalue'] = 'Please enter a value for {$a}.';
 $string['error_notanumber'] = 'The value for {$a} is not a valid number.';
@@ -76,6 +86,8 @@ Examples:
 
 Operators: `+ - * / ^` (power), and brackets. Functions include `sqrt()`, `abs()`, `ln()`, `log()` (natural log), `exp()`, `sin()`, `cos()`, `tan()` (radians), `asin()`, `acos()`, `atan()`, `pi()`, `power(x, y)`, `min()`, `max()`, `average()`, `sum()`, `round(x, dp)`, `floor()`, `ceil()`. Numbers may use e-notation, e.g. `6.022e23`.
 
+If an earlier calculated value is compared with a known value, its known value can be used as `{name_known}`, e.g. `100 * abs({density} - {density_known}) / {density_known}`.
+
 Enter only the right-hand side: write `{mass} / {volume}`, not `density = {mass} / {volume}`.';
 $string['groupcheck_mismatch'] = 'Some of your measurements do not match the values recorded for {$a}:';
 $string['groupcheck_mismatchitem'] = '{$a->label}: you entered {$a->given} {$a->unit}; your group recorded {$a->recorded} {$a->unit}.';
@@ -98,16 +110,45 @@ $string['groupdata_help'] = 'One line per group. The first line is a heading: th
 
     group, mass, volume
     Group A, 26.4, 9.8
-    Group B, 27.1, 10.0';
+    Group B, 27.1, 10.0
+
+If groups were given different samples, you can also give each group\'s known value for a calculated value, in a column headed with its name followed by _known (e.g. density_known). This works whether or not measurements are checked.';
 $string['groupdata_nocolumns'] = 'The first line must be a heading listing the experimental value names, e.g. "group, mass, volume".';
 $string['groupdata_nogroup'] = 'Line {$a->line} has no group name.';
 $string['groupdata_norows'] = 'Add at least one line of group data below the heading.';
 $string['groupdata_notnumber'] = 'Line {$a->line} (group "{$a->group}"): "{$a->value}" is not a number.';
-$string['groupdata_unknowncolumn'] = 'The heading "{$a}" is not the name of an experimental value.';
-$string['groupdatachecks'] = 'Group data checks';
+$string['groupdata_unknowncolumn'] = 'The heading "{$a}" is not the name of an experimental value, or of a known value (name_known) for a calculated value that is compared with a known value.';
+$string['groupdatachecks'] = 'Group data';
 $string['grouppenalty'] = 'Mark reduction when measurements differ';
-$string['partialfraction'] = 'Partial credit';
+$string['knowncompare'] = 'Compare';
+$string['knowncompare_fromdata'] = 'The value calculated correctly from the student\'s measurements';
+$string['knowncompare_help'] = 'Which value to compare with the known value.
+
+* **The value the student reported** – the value the student entered.
+* **The value calculated correctly from the student\'s measurements** – judges the quality of the experiment alone, so an arithmetic slip is not penalised twice when accuracy is graded.';
+$string['knowncompare_reported'] = 'The value the student reported';
+$string['knowncomparison_fromdata_absolute'] = '{$a->label}: from your measurements, the value is {$a->finding} {$a->unit}, which differs from the known value of {$a->known} {$a->unit} by {$a->difference} {$a->unit}.';
+$string['knowncomparison_fromdata_percent'] = '{$a->label}: from your measurements, the value is {$a->finding} {$a->unit}, which is {$a->percent}% from the known value of {$a->known} {$a->unit}.';
+$string['knowncomparison_reported_absolute'] = '{$a->label}: your value of {$a->finding} {$a->unit} differs from the known value of {$a->known} {$a->unit} by {$a->difference} {$a->unit}.';
+$string['knowncomparison_reported_percent'] = '{$a->label}: your value of {$a->finding} {$a->unit} is {$a->percent}% from the known value of {$a->known} {$a->unit}.';
+$string['knownformula'] = 'Known value';
+$string['knownformula_help'] = 'The accepted, literature or theoretical value that this calculated value estimates. Enter a number (e.g. `2.70` or `9.81`) or a formula using the experimental values and earlier calculated values, e.g. `{mass_reactant} / 138.12 * 180.16` for a theoretical yield.
+
+Later formulas can use this known value as `{name_known}`, e.g. a percent error `100 * abs({density} - {density_known}) / {density_known}`.
+
+If each lab group has a different sample, give the known values in the group data table in a column headed `name_known` (e.g. `density_known`). Those values are used for students in those groups, and this value (if any) for everyone else.';
+$string['knownmode'] = 'Compare with a known value';
+$string['knownmode_feedback'] = 'Yes, in the feedback only';
+$string['knownmode_graded'] = 'Yes, and give marks for accuracy';
+$string['knownmode_help'] = 'Compare the student\'s finding with a known (accepted or theoretical) value.
+
+* **In the feedback only** – students are told how far their finding is from the known value. The mark is not affected.
+* **Give marks for accuracy** – part of this value\'s mark depends on how close the finding is to the known value.';
+$string['knownmode_off'] = 'No';
+$string['knownvalueis'] = 'Known value: {$a->value} {$a->unit}.';
+$string['knownvaluesummary'] = 'known value {$a}';
 $string['partialearns'] = 'Earns';
+$string['partialfraction'] = 'Partial credit';
 $string['partialtolerance'] = 'Partial credit (optional)';
 $string['partialtolerance_help'] = 'If set, answers outside the full-marks tolerance but inside this wider tolerance receive the chosen share of this value\'s marks. Uses the same tolerance type. Leave blank for no partial credit.';
 $string['partialwithin'] = 'Within (same type)';
@@ -160,10 +201,10 @@ $string['status_partial'] = 'Within partial credit tolerance';
 $string['status_partial_badsf'] = 'Within partial credit tolerance, wrong significant figures';
 $string['tolerance'] = 'Tolerance for full marks';
 $string['tolerance_help'] = 'How close the student\'s calculated value must be to the value given by the formula. For a relative tolerance this is a percentage of the correct value (e.g. 1 means ±1%); for an absolute tolerance it is in the units of the calculated value (e.g. 0.05).';
-$string['tolerancevalue'] = 'Value';
 $string['toleranceabsolute'] = 'Absolute';
 $string['tolerancerelative'] = 'Relative (%)';
 $string['tolerancetype'] = 'Type';
+$string['tolerancevalue'] = 'Value';
 $string['usingyourdata'] = 'Using your experimental values, the correct answers are:';
 $string['varchecktolerance'] = 'Allowed difference from group data';
 $string['varchecktolerance_help'] = 'How far a student\'s measurement may be from the value recorded for their group. Enter a percentage (e.g. 2%) or an absolute difference in this value\'s unit (e.g. 0.5). Leave blank to require an exact match.';

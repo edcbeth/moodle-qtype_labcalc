@@ -26,6 +26,7 @@
 use qtype_labcalc\evaluator;
 use qtype_labcalc\evaluation_exception;
 use qtype_labcalc\groupdata;
+use qtype_labcalc\knownvalue;
 use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
@@ -156,6 +157,36 @@ class qtype_labcalc_edit_form extends question_edit_form {
         $repeated[] = $mform->createElement('select', 'resdisplaysigfigs',
                 get_string('displaysigfigs', 'qtype_labcalc'), $sigfigoptions);
 
+        // Comparison with a known value.
+        $repeated[] = $mform->createElement('select', 'resknownmode', get_string('knownmode', 'qtype_labcalc'), [
+            knownvalue::MODE_OFF => get_string('knownmode_off', 'qtype_labcalc'),
+            knownvalue::MODE_FEEDBACK => get_string('knownmode_feedback', 'qtype_labcalc'),
+            knownvalue::MODE_GRADED => get_string('knownmode_graded', 'qtype_labcalc'),
+        ]);
+        $repeated[] = $mform->createElement('text', 'resknownformula', get_string('knownformula', 'qtype_labcalc'),
+                ['size' => 40]);
+        $repeated[] = $mform->createElement('select', 'resknowncompare', get_string('knowncompare', 'qtype_labcalc'), [
+            knownvalue::COMPARE_REPORTED => get_string('knowncompare_reported', 'qtype_labcalc'),
+            knownvalue::COMPARE_FROMDATA => get_string('knowncompare_fromdata', 'qtype_labcalc'),
+        ]);
+        $repeated[] = $mform->createElement('group', 'resaccgroup', get_string('accuracytolerance', 'qtype_labcalc'), [
+            $mform->createElement('text', 'resaccuracytolerance', get_string('tolerancevalue', 'qtype_labcalc'),
+                    ['size' => 8]),
+            $mform->createElement('select', 'resaccuracytolerancetype', get_string('tolerancetype', 'qtype_labcalc'), [
+                evaluator::TOLERANCE_RELATIVE => get_string('tolerancerelative', 'qtype_labcalc'),
+                evaluator::TOLERANCE_ABSOLUTE => get_string('toleranceabsolute', 'qtype_labcalc'),
+            ]),
+        ], ' ', false);
+        $repeated[] = $mform->createElement('group', 'resaccpartialgroup',
+                get_string('accuracypartial', 'qtype_labcalc'), [
+            $mform->createElement('text', 'resaccuracypartialtolerance', get_string('partialwithin', 'qtype_labcalc'),
+                    ['size' => 8, 'placeholder' => get_string('none')]),
+            $mform->createElement('select', 'resaccuracypartialfraction', get_string('partialearns', 'qtype_labcalc'),
+                    $fractions),
+        ], ' ', false);
+        $repeated[] = $mform->createElement('select', 'resaccuracyweight',
+                get_string('accuracyweight', 'qtype_labcalc'), $penalties);
+
         $options = [];
         foreach (['resname', 'reslabel', 'resunit', 'resformula', 'restolerance', 'respartialtolerance', 'resweight'] as $f) {
             $options[$f]['type'] = PARAM_RAW_TRIMMED;
@@ -178,6 +209,25 @@ class qtype_labcalc_edit_form extends question_edit_form {
         $options['ressigfigspenalty']['hideif'] = ['ressigfigsmode', 'eq', sigfigs::MODE_OFF];
         $options['resweight']['default'] = '1';
         $options['resdisplaysigfigs']['default'] = 4;
+        foreach (['resknownformula', 'resaccuracytolerance', 'resaccuracypartialtolerance'] as $f) {
+            $options[$f]['type'] = PARAM_RAW_TRIMMED;
+        }
+        $options['resknownmode']['default'] = knownvalue::MODE_OFF;
+        $options['resknownmode']['helpbutton'] = ['knownmode', 'qtype_labcalc'];
+        $options['resknownformula']['helpbutton'] = ['knownformula', 'qtype_labcalc'];
+        $options['resknownformula']['hideif'] = ['resknownmode', 'eq', knownvalue::MODE_OFF];
+        $options['resknowncompare']['default'] = knownvalue::COMPARE_REPORTED;
+        $options['resknowncompare']['helpbutton'] = ['knowncompare', 'qtype_labcalc'];
+        $options['resknowncompare']['hideif'] = ['resknownmode', 'eq', knownvalue::MODE_OFF];
+        $options['resaccuracytolerance']['default'] = '5';
+        $options['resaccuracytolerancetype']['default'] = evaluator::TOLERANCE_RELATIVE;
+        $options['resaccgroup']['helpbutton'] = ['accuracytolerance', 'qtype_labcalc'];
+        $options['resaccgroup']['hideif'] = ['resknownmode', 'neq', knownvalue::MODE_GRADED];
+        $options['resaccuracypartialfraction']['default'] = '0.5';
+        $options['resaccpartialgroup']['hideif'] = ['resknownmode', 'neq', knownvalue::MODE_GRADED];
+        $options['resaccuracyweight']['default'] = '0.25';
+        $options['resaccuracyweight']['helpbutton'] = ['accuracyweight', 'qtype_labcalc'];
+        $options['resaccuracyweight']['hideif'] = ['resknownmode', 'neq', knownvalue::MODE_GRADED];
 
         $count = max(self::RESULTS_AT_START, count($this->question->options->results ?? []));
         $this->repeat_elements($repeated, $count, $options, 'noresults', 'addresults', 1,
@@ -191,6 +241,9 @@ class qtype_labcalc_edit_form extends question_edit_form {
      */
     protected function add_group_fields($mform) {
         $mform->addElement('header', 'grouphdr', get_string('groupdatachecks', 'qtype_labcalc'));
+        if (!empty($this->question->options->groupdata)) {
+            $mform->setExpanded('grouphdr', true);
+        }
 
         $mform->addElement('select', 'groupcheckmode', get_string('groupcheckmode', 'qtype_labcalc'), [
             groupdata::MODE_OFF => get_string('groupcheckmode_off', 'qtype_labcalc'),
@@ -211,7 +264,6 @@ class qtype_labcalc_edit_form extends question_edit_form {
                  'placeholder' => "group, mass, volume\nGroup A, 26.4, 9.8\nGroup B, 27.1, 10.0"]);
         $mform->setType('groupdata', PARAM_RAW);
         $mform->addHelpButton('groupdata', 'groupdata', 'qtype_labcalc');
-        $mform->hideIf('groupdata', 'groupcheckmode', 'eq', groupdata::MODE_OFF);
     }
 
     protected function data_preprocessing($question) {
@@ -229,23 +281,40 @@ class qtype_labcalc_edit_form extends question_edit_form {
             }
         }
 
-        $numeric = ['rangemin', 'rangemax', 'samplevalue', 'tolerance', 'partialtolerance', 'weight'];
+        $numeric = ['rangemin', 'rangemax', 'samplevalue', 'tolerance', 'partialtolerance', 'weight',
+                'accuracytolerance', 'accuracypartialtolerance'];
         foreach (array_values($o->vars ?? []) as $i => $var) {
             foreach (qtype_labcalc::VAR_FORM_FIELDS as $formfield => $field) {
                 $value = $var->$field ?? '';
                 $question->{$formfield}[$i] = in_array($field, $numeric) ? self::localise($value) : $value;
+                $this->clear_repeat_default($formfield, $i);
             }
         }
         foreach (array_values($o->results ?? []) as $i => $res) {
             foreach (qtype_labcalc::RESULT_FORM_FIELDS as $formfield => $field) {
-                $value = $res->$field;
+                $value = $res->$field ?? '';
                 if ($field === 'weight') {
                     $value = (string) (float) $value;
                 }
                 $question->{$formfield}[$i] = in_array($field, $numeric) ? self::localise($value) : $value;
+                $this->clear_repeat_default($formfield, $i);
             }
         }
         return $question;
+    }
+
+    /**
+     * Remove the default that repeat_elements() set for one repeated field, so the saved value is shown.
+     *
+     * Formslib stores repeat defaults as _defaultValues['name[0]'], but set_data() stores the loaded
+     * values as _defaultValues['name'][0], and the former wins. Core question types work around this
+     * the same way (see question_edit_form::data_preprocessing_answers()).
+     *
+     * @param string $formfield
+     * @param int $i
+     */
+    protected function clear_repeat_default(string $formfield, int $i): void {
+        unset($this->_form->_defaultValues["{$formfield}[{$i}]"]);
     }
 
     /**
@@ -298,6 +367,10 @@ class qtype_labcalc_edit_form extends question_edit_form {
                 $errors["varname[$i]"] = get_string('error_varnameinvalid', 'qtype_labcalc');
                 continue;
             }
+            if (self::ends_with_known_suffix($name)) {
+                $errors["varname[$i]"] = get_string('error_knownsuffix', 'qtype_labcalc');
+                continue;
+            }
             if (in_array($name, $names)) {
                 $errors["varname[$i]"] = get_string('error_varnameduplicate', 'qtype_labcalc', $name);
                 continue;
@@ -340,8 +413,10 @@ class qtype_labcalc_edit_form extends question_edit_form {
         }
         $varnames = array_keys($samples);
 
-        // Calculated values. Each formula may use the experimental values and earlier results.
+        // Calculated values. Each formula may use the experimental values, earlier results and their known values.
         $env = $samples;
+        $knownnames = [];
+        $knownfromgroups = [];
         $resultcount = 0;
         foreach ($data['resname'] ?? [] as $i => $name) {
             $name = core_text::strtolower(trim($name));
@@ -355,6 +430,10 @@ class qtype_labcalc_edit_form extends question_edit_form {
             $resultcount++;
             if (!evaluator::is_valid_name($name)) {
                 $errors["resname[$i]"] = get_string('error_varnameinvalid', 'qtype_labcalc');
+                continue;
+            }
+            if (self::ends_with_known_suffix($name)) {
+                $errors["resname[$i]"] = get_string('error_knownsuffix', 'qtype_labcalc');
                 continue;
             }
             if (in_array($name, $names)) {
@@ -387,6 +466,42 @@ class qtype_labcalc_edit_form extends question_edit_form {
                 $env[$name] = 1.0; // So later formulas can still be checked.
             }
 
+            // Known value. It may use the experimental values and earlier calculated values (and their known values).
+            $knownmode = (int) ($data['resknownmode'][$i] ?? knownvalue::MODE_OFF);
+            if ($knownmode != knownvalue::MODE_OFF) {
+                $knownnames[] = $name . knownvalue::SUFFIX;
+                $knownformula = trim($data['resknownformula'][$i] ?? '');
+                if ($knownformula === '') {
+                    $knownfromgroups[$i] = $name . knownvalue::SUFFIX; // Must then come from the group data.
+                } else {
+                    $knownenv = array_diff_key($env, [$name => true]);
+                    $unknown = array_diff(evaluator::find_variables($knownformula), array_keys($knownenv));
+                    if ($unknown) {
+                        $errors["resknownformula[$i]"] = get_string('error_unknownvars', 'qtype_labcalc',
+                                '{' . implode('}, {', $unknown) . '}');
+                    } else {
+                        try {
+                            $env[$name . knownvalue::SUFFIX] = evaluator::evaluate($knownformula, $knownenv);
+                        } catch (evaluation_exception $e) {
+                            $errors["resknownformula[$i]"] = get_string('error_formulainvalid', 'qtype_labcalc',
+                                    $e->getMessage());
+                        }
+                    }
+                }
+                if ($knownmode == knownvalue::MODE_GRADED) {
+                    $acc = self::parse($data['resaccuracytolerance'][$i] ?? '');
+                    if ($acc === false || $acc === null || $acc < 0) {
+                        $errors["resaccgroup[$i]"] = get_string('error_tolerance', 'qtype_labcalc');
+                    }
+                    $accpartial = self::parse($data['resaccuracypartialtolerance'][$i] ?? '');
+                    if ($accpartial === false || ($accpartial !== null && $accpartial < 0)) {
+                        $errors["resaccpartialgroup[$i]"] = get_string('error_tolerance', 'qtype_labcalc');
+                    } else if ($accpartial !== null && is_float($acc) && $accpartial <= $acc) {
+                        $errors["resaccpartialgroup[$i]"] = get_string('error_partialtolerance', 'qtype_labcalc');
+                    }
+                }
+            }
+
             $tolerance = self::parse($data['restolerance'][$i] ?? '');
             if ($tolerance === false || $tolerance === null || $tolerance < 0) {
                 $errors["restolgroup[$i]"] = get_string('error_tolerance', 'qtype_labcalc');
@@ -406,21 +521,41 @@ class qtype_labcalc_edit_form extends question_edit_form {
             $errors['resname[0]'] = get_string('error_atleastoneresult', 'qtype_labcalc');
         }
 
-        // Group data.
-        if (($data['groupcheckmode'] ?? 0) != groupdata::MODE_OFF) {
-            if (trim($data['groupdata'] ?? '') === '') {
+        // Group data: measurements to check, and/or per-group known values.
+        $groupcolumns = [];
+        if (trim($data['groupdata'] ?? '') === '') {
+            if (($data['groupcheckmode'] ?? 0) != groupdata::MODE_OFF) {
                 $errors['groupdata'] = get_string('error_groupdatarequired', 'qtype_labcalc');
-            } else {
-                [$rows, $problems] = groupdata::parse($data['groupdata'], $varnames);
-                if ($problems) {
-                    $errors['groupdata'] = implode(' ', array_slice($problems, 0, 5));
-                } else if (!$rows) {
-                    $errors['groupdata'] = get_string('groupdata_norows', 'qtype_labcalc');
-                }
+            }
+        } else {
+            [$rows, $problems] = groupdata::parse($data['groupdata'], array_merge($varnames, $knownnames));
+            if ($problems) {
+                $errors['groupdata'] = implode(' ', array_slice($problems, 0, 5));
+            } else if (!$rows) {
+                $errors['groupdata'] = get_string('groupdata_norows', 'qtype_labcalc');
+            }
+            foreach ($rows as $row) {
+                $groupcolumns += array_flip(array_keys($row['values']));
+            }
+        }
+        // A known value left blank must be given in the group data.
+        foreach ($knownfromgroups as $i => $column) {
+            if (!isset($groupcolumns[$column]) && empty($errors["resknownformula[$i]"])) {
+                $errors["resknownformula[$i]"] = get_string('error_knownrequired', 'qtype_labcalc', $column);
             }
         }
 
         return $errors;
+    }
+
+    /**
+     * Does a name end with the suffix reserved for known values?
+     *
+     * @param string $name
+     * @return bool
+     */
+    protected static function ends_with_known_suffix(string $name): bool {
+        return substr($name, -strlen(knownvalue::SUFFIX)) === knownvalue::SUFFIX;
     }
 
     public function qtype() {

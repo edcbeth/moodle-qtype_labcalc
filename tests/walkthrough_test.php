@@ -115,4 +115,20 @@ final class walkthrough_test extends \qbehaviour_walkthrough_test_base {
                 'res_error' => '0.37', '-submit' => 1]);
         $this->check_current_state(question_state::$gradedright);
     }
+    public function test_known_value_feedback(): void {
+        $q = \test_question_maker::make_question('labcalc', 'accuracy');
+        $this->start_attempt_at_question($q, 'deferredfeedback', 2);
+        // Correct calculation 2.80, 3.7% from the known 2.70: half the accuracy marks (25% of the density mark).
+        $this->process_submission(['exp_mass' => '28.0', 'exp_volume' => '10.0', 'res_density' => '2.80', 'res_error' => '3.7']);
+        $this->finish();
+        $this->check_current_state(question_state::$gradedpartial);
+        $this->check_current_mark(1.875);
+
+        $this->displayoptions->rightanswer = \question_display_options::VISIBLE;
+        $this->render();
+        $this->assertStringContainsString('your value of 2.80 g/mL is 3.70% from the known value of 2.70 g/mL',
+                $this->currentoutput);
+        $this->assertStringContainsString('close enough for 50% of the accuracy marks', $this->currentoutput);
+        $this->assertStringContainsString('Known value: 2.70 g/mL.', $this->currentoutput);
+    }
 }

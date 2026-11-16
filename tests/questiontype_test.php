@@ -84,6 +84,78 @@ final class questiontype_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('qtype_labcalc_vars', ['questionid' => $data->id]));
         $this->assertFalse($DB->record_exists('qtype_labcalc_results', ['questionid' => $data->id]));
     }
+    public function test_save_and_load_known_value(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category();
+        $created = $generator->create_question('labcalc', 'accuracy', ['category' => $category->id]);
+        $data = \question_bank::load_question_data($created->id);
+        $results = array_values($data->options->results);
+        $this->assertEquals(2, $results[0]->knownmode);
+        $this->assertEquals('2.70', $results[0]->knownformula);
+        $this->assertEquals('5', $results[0]->accuracypartialtolerance);
+        $this->assertEquals(0, $results[1]->knownmode);
+
+        $q = \question_bank::load_question($created->id);
+        $this->assertSame(2.0, $q->results[0]->accuracytolerance);
+        $this->assertSame(5.0, $q->results[0]->accuracypartialtolerance);
+        $this->assertSame(0.25, $q->results[0]->accuracyweight);
+        $this->assertNull($q->results[1]->accuracypartialtolerance);
+        $analysis = $q->analyse_response(['exp_mass' => '28.0', 'exp_volume' => '10.0', 'res_density' => '2.80',
+                'res_error' => '3.7']);
+        $this->assertEqualsWithDelta((0.875 + 1) / 2, $analysis->fraction, 1e-9);
+
+        // XML round trip.
+        $xml = (new \qformat_xml())->writequestion($data);
+        $this->assertStringContainsString('<knownformula>2.70</knownformula>', $xml);
+        $imported = $this->import_xml($xml);
+        $this->assertEquals(['2', '0'], $imported->resknownmode);
+        $this->assertEquals(['2.70', ''], $imported->resknownformula);
+        $this->assertEquals(['0.2500000', '0.2500000'], $imported->resaccuracyweight);
+        $this->assertStringContainsString('density_known', $imported->groupdata);
+    }
+
+    public function test_edit_form_shows_saved_values(): void {
+        // Regression test: repeat_elements() defaults used to override the saved values when editing.
+        global $PAGE;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $PAGE->set_url('/question/bank/editquestion/question.php');
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category();
+        $created = $generator->create_question('labcalc', 'accuracy', ['category' => $category->id]);
+        $question = \question_bank::load_question_data($created->id);
+        $question->formoptions = (object) ['canedit' => true, 'canmove' => true, 'cansaveasnew' => false,
+                'repeatelements' => true];
+        $question->inpopup = false;
+        $question->beingcopied = false;
+        $question->category = $category->id;
+        $contexts = new \core_question\local\bank\question_edit_contexts(\context::instance_by_id($category->contextid));
+        $form = new \qtype_labcalc_edit_form(new \moodle_url('/'), $question, $category, $contexts);
+        $form->set_data($question);
+        $html = $form->render();
+
+        $value = function(string $id) use ($html): string {
+            $this->assertMatchesRegularExpression('~id="id_' . $id . '"~', $html, $id);
+            if (preg_match('~<input[^>]*id="id_' . $id . '"[^>]*value="([^"]*)"~', $html, $m) ||
+                    preg_match('~<input[^>]*value="([^"]*)"[^>]*id="id_' . $id . '"~', $html, $m)) {
+                return $m[1];
+            }
+            preg_match('~<select[^>]*id="id_' . $id . '".*?</select>~s', $html, $select);
+            preg_match('~<option value="([^"]*)"[^>]*selected~', $select[0] ?? '', $m);
+            return $m[1] ?? '(none selected)';
+        };
+        $this->assertEquals('0.5', $value('restolerance_1'));
+        $this->assertEquals('2', $value('restolerancetype_1'));
+        $this->assertEquals('0.2', $value('varchecktolerance_1'));
+        $this->assertEquals('2', $value('resknownmode_0'));
+        $this->assertEquals('2.70', $value('resknownformula_0'));
+        $this->assertEquals('2', $value('resaccuracytolerance_0'));
+        $this->assertEquals('1', $value('resweight_0'));
+        $this->assertEquals('3', $value('resdisplaysigfigs_1'));
+    }
+
     public function test_xml_round_trip(): void {
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -174,6 +246,8 @@ final class questiontype_test extends \advanced_testcase {
             'resname' => ['density', 'error'], 'reslabel' => ['', ''], 'resunit' => ['', ''],
             'resformula' => ['{mass} / {volume}', '100 * abs({density} - 2.7) / 2.7'],
             'restolerance' => ['1', '0.5'], 'respartialtolerance' => ['', ''], 'resweight' => ['2', '1'],
+            'resknownmode' => [0, 0], 'resknownformula' => ['', ''], 'resknowncompare' => [0, 0],
+            'resaccuracytolerance' => ['5', '5'], 'resaccuracypartialtolerance' => ['', ''],
             'groupcheckmode' => 0, 'groupdata' => '',
         ], $overrides);
         $method = new \ReflectionMethod($form, 'validation');
@@ -235,5 +309,44 @@ final class questiontype_test extends \advanced_testcase {
                 'varchecktolerance' => ['two', '']]);
         $this->assertArrayHasKey('varchecktolerance[0]', $errors);
         $this->assertArrayNotHasKey('groupdata', $errors);
+    }
+
+    public function test_form_validation_known_values(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $known = ['resknownmode' => [2, 0], 'resknownformula' => ['2.70', ''],
+                'resformula' => ['{mass} / {volume}', '100 * abs({density} - {density_known}) / {density_known}']];
+        $this->assertEmpty($this->validate($known));
+
+        // A known value is required, unless every group's is given in the group data.
+        $errors = $this->validate(['resknownformula' => ['', '']] + $known);
+        $this->assertStringContainsString('density_known', $errors['resknownformula[0]']);
+        $this->assertArrayNotHasKey('resknownformula[0]', $this->validate(['resknownformula' => ['', ''],
+                'resformula' => ['{mass} / {volume}', '{density} * 2'],
+                'groupdata' => "group, density_known\nA, 2.70"] + $known));
+
+        // {name_known} is only available for values compared with a known value.
+        $errors = $this->validate(['resknownmode' => [0, 0]] + $known);
+        $this->assertStringContainsString('{density_known}', $errors['resformula[1]']);
+
+        // The known value formula is checked.
+        $errors = $this->validate(['resknownformula' => ['{nope} * 2', '']] + $known);
+        $this->assertArrayHasKey('resknownformula[0]', $errors);
+        $errors = $this->validate(['resknownformula' => ['{density} * 2', '']] + $known);
+        $this->assertArrayHasKey('resknownformula[0]', $errors); // Cannot use its own value.
+
+        // Names ending in _known are reserved.
+        $errors = $this->validate(['resname' => ['density', 'error_known']] + $known);
+        $this->assertArrayHasKey('resname[1]', $errors);
+
+        // Accuracy tolerances.
+        $errors = $this->validate(['resaccuracytolerance' => ['-1', '5']] + $known);
+        $this->assertArrayHasKey('resaccgroup[0]', $errors);
+        $errors = $this->validate(['resaccuracytolerance' => ['5', '5'], 'resaccuracypartialtolerance' => ['2', '']] + $known);
+        $this->assertArrayHasKey('resaccpartialgroup[0]', $errors);
+
+        // Group data column for a value that is not compared with a known value.
+        $errors = $this->validate(['groupdata' => "group, error_known\nA, 1"] + $known);
+        $this->assertArrayHasKey('groupdata', $errors);
     }
 }

@@ -26,6 +26,7 @@
 use qtype_labcalc\evaluator;
 use qtype_labcalc\evaluation_exception;
 use qtype_labcalc\groupdata;
+use qtype_labcalc\knownvalue;
 use qtype_labcalc\sigfigs;
 
 defined('MOODLE_INTERNAL') || die();
@@ -143,7 +144,10 @@ class qtype_labcalc_question extends question_graded_automatically {
      */
     protected function find_group_key(int $userid): ?string {
         global $PAGE;
-        if ($this->groupcheckmode == groupdata::MODE_OFF || !$this->get_group_rows()) {
+        if (!$this->get_group_rows()) {
+            return null;
+        }
+        if ($this->groupcheckmode == groupdata::MODE_OFF && !$this->uses_group_known_values()) {
             return null;
         }
         try {
@@ -163,9 +167,88 @@ class qtype_labcalc_question extends question_graded_automatically {
      */
     public function get_group_rows(): array {
         if ($this->grouprows === null) {
-            [$this->grouprows] = groupdata::parse($this->groupdata, array_map(fn($v) => $v->name, $this->vars));
+            [$this->grouprows] = groupdata::parse($this->groupdata, $this->group_data_columns());
         }
         return $this->grouprows;
+    }
+
+    /**
+     * Column names allowed in the group data: experimental values, and {name}_known for each
+     * calculated value that is compared with a known value.
+     *
+     * @return string[]
+     */
+    public function group_data_columns(): array {
+        $columns = array_map(fn($v) => $v->name, $this->vars);
+        foreach ($this->results as $res) {
+            if ($res->knownmode != knownvalue::MODE_OFF) {
+                $columns[] = $res->name . knownvalue::SUFFIX;
+            }
+        }
+        return $columns;
+    }
+
+    /**
+     * Does the group data give a known value for any calculated value?
+     *
+     * @return bool
+     */
+    protected function uses_group_known_values(): bool {
+        foreach ($this->get_group_rows() as $row) {
+            foreach (array_keys($row['values']) as $column) {
+                if (substr($column, -strlen(knownvalue::SUFFIX)) === knownvalue::SUFFIX) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The known value for a calculated value: from the student's group data if given there,
+     * otherwise from the question's known value formula.
+     *
+     * @param stdClass $res
+     * @param array $env values available to the formula.
+     * @return float|null null if there is no known value (or it cannot be calculated).
+     */
+    public function get_known_value(stdClass $res, array $env): ?float {
+        if ($this->known_value_from_group($res)) {
+            return $this->get_group_rows()[$this->groupkey]['values'][$res->name . knownvalue::SUFFIX];
+        }
+        return $this->get_known_value_from_formula($res, $env);
+    }
+
+    /**
+     * Does the known value for this calculated value come from the student's group data?
+     *
+     * @param stdClass $res
+     * @return bool
+     */
+    public function known_value_from_group(stdClass $res): bool {
+        if ($res->knownmode == knownvalue::MODE_OFF || $this->groupkey === null) {
+            return false;
+        }
+        $rows = $this->get_group_rows();
+        return isset($rows[$this->groupkey]['values'][$res->name . knownvalue::SUFFIX]);
+    }
+
+    /**
+     * The known value from the question's known value formula.
+     *
+     * @param stdClass $res
+     * @param array $env values available to the formula.
+     * @return float|null
+     */
+    protected function get_known_value_from_formula(stdClass $res, array $env): ?float {
+        if ($res->knownmode == knownvalue::MODE_OFF || $res->knownformula === '') {
+            return null;
+        }
+        try {
+            return evaluator::evaluate($res->knownformula, $env);
+        } catch (evaluation_exception $e) {
+            return null;
+        }
     }
 
     /**
@@ -227,7 +310,9 @@ class qtype_labcalc_question extends question_graded_automatically {
      *      results  list of stdClass, one per calculated value (when graded):
      *               name, given, expected, valuestatus ('correct'|'partial'|'incorrect'),
      *               requiredsigfigs (int|null), sigfigs (null if not checked, or stdClass: required,
-     *               given [min, max], ok), score
+     *               given [min, max], ok), calculationscore (mark for the calculation alone),
+     *               known (null, or the comparison with the known value from knownvalue::compare()),
+     *               score (overall mark for this value, 0..1)
      *      datacheck null, or stdClass: group (label or null), mismatches (list), penalised (bool)
      *      fraction overall fraction
      */
@@ -320,6 +405,19 @@ class qtype_labcalc_question extends question_graded_automatically {
                         $item->score *= (1 - $res->sigfigspenalty);
                     }
                 }
+            }
+
+            // Comparison with the known value.
+            $item->calculationscore = $item->score;
+            $item->known = null;
+            $known = $this->get_known_value($res, $env);
+            if ($known !== null) {
+                $finding = $res->knowncompare == knownvalue::COMPARE_FROMDATA ? $expected : $item->given;
+                $item->known = knownvalue::compare($finding, $known, $res);
+                if ($res->knownmode == knownvalue::MODE_GRADED) {
+                    $item->score = knownvalue::combine($item->calculationscore, $item->known->score, $res->accuracyweight);
+                }
+                $env[$res->name . knownvalue::SUFFIX] = $known;
             }
 
             $analysis->results[] = $item;
@@ -538,6 +636,10 @@ class qtype_labcalc_question extends question_graded_automatically {
             }
             $raw[$res->name] = $string;
             $response[$this->field_for_result($res)] = str_replace('.', get_string('decsep', 'langconfig'), $string);
+            $known = $this->get_known_value($res, $env);
+            if ($known !== null) {
+                $env[$res->name . knownvalue::SUFFIX] = $known;
+            }
             $env[$res->name] = $this->carryforward ? (float) $string : $expected;
         }
         return $response;
@@ -556,8 +658,12 @@ class qtype_labcalc_question extends question_graded_automatically {
     public function get_right_answer_summary() {
         $parts = [];
         foreach ($this->results as $res) {
-            $parts[] = $this->label_for($res) . ' = ' . evaluator::display_formula($res->formula) .
+            $part = $this->label_for($res) . ' = ' . evaluator::display_formula($res->formula) .
                     ' (' . $this->describe_tolerance($res) . ')';
+            if ($res->knownmode != knownvalue::MODE_OFF && $res->knownformula !== '') {
+                $part .= ', ' . get_string('knownvaluesummary', 'qtype_labcalc', evaluator::display_formula($res->knownformula));
+            }
+            $parts[] = $part;
         }
         return get_string('rightanswersummary', 'qtype_labcalc', implode('; ', $parts));
     }
