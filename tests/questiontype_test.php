@@ -29,7 +29,7 @@ require_once($CFG->dirroot . '/question/type/labcalc/edit_labcalc_form.php');
  * Tests for saving, loading, import/export and form validation.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \qtype_labcalc
  * @covers     \qtype_labcalc_edit_form

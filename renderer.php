@@ -19,7 +19,7 @@
  * Lab calculation question renderer.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -32,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Generates the output for Lab calculation questions.
  *
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_labcalc_renderer extends qtype_with_combined_feedback_renderer {

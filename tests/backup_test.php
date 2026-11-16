@@ -27,7 +27,7 @@ require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
  * Backup and restore tests for the Lab calculation question type.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \backup_qtype_labcalc_plugin
  * @covers     \restore_qtype_labcalc_plugin

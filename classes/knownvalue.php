@@ -21,7 +21,7 @@ namespace qtype_labcalc;
  * Comparing a student's finding with a known (accepted or theoretical) value.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class knownvalue {

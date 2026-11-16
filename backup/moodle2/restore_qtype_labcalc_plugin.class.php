@@ -19,7 +19,7 @@
  * Restore support for the Lab calculation question type.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -28,7 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Restores Lab calculation questions, including backups made with version 1.0.
  *
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restore_qtype_labcalc_plugin extends restore_qtype_plugin {

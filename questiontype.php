@@ -19,7 +19,7 @@
  * Question type class for the Lab calculation question type.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -41,7 +41,7 @@ require_once($CFG->dirroot . '/question/type/labcalc/question.php');
  * data, optionally checking significant figures, and the measurements can be checked against values
  * the instructor recorded for the student's group.
  *
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class qtype_labcalc extends question_type {

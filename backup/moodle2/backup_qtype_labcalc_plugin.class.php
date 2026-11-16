@@ -19,7 +19,7 @@
  * Backup support for the Lab calculation question type.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -28,7 +28,7 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Provides the information to back up Lab calculation questions.
  *
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class backup_qtype_labcalc_plugin extends backup_qtype_plugin {

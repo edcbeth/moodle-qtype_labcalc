@@ -25,7 +25,7 @@ namespace qtype_labcalc;
  * counts, and an answer is accepted if the required count falls within that range.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class sigfigs {

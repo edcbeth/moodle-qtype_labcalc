@@ -21,7 +21,7 @@ namespace qtype_labcalc\privacy;
  * Privacy Subsystem for qtype_labcalc implementing null_provider.
  *
  * @package    qtype_labcalc
- * @copyright  2026
+ * @copyright  2026 Edward Bethel <edcbeth@gmail.com>
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class provider implements \core_privacy\local\metadata\null_provider {
